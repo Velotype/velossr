@@ -1,6 +1,6 @@
 import { App, Context, Inspector, RequestInspectorResponse, Router } from "jsr:@velotype/veloserver"
 import { BasicStaticTest, BasicDynamicTest, BasicPage } from "./test_modules/basic-div.tsx"
-import { createElement, prepareHTMLVNodeForRendering, renderedVNodeToUint8Array, renderServerVNode } from "jsr:@velotype/velossr/jsx-runtime"
+import { createElement, prepareHTMLVNodeForRendering, renderServerVNode } from "jsr:@velotype/velossr/jsx-runtime"
 
 export function startAppServer(server_port: number): Promise<App> {
     const router: Router = new Router()
@@ -33,7 +33,9 @@ export function startAppServer(server_port: number): Promise<App> {
     setOfModules.forEach((module) => {
         const preparedModule = prepareHTMLVNodeForRendering(createElement(BasicPage,{modules: setOfModules},createElement(module.page,{})))
         router.get(`/${module.name}`, async (request: Request, context: Context) => {
-            const response = new Response(await renderedVNodeToUint8Array(renderServerVNode(preparedModule, request, context)),{status:200})
+            // TODO this type cast is a workaround ... needs fixing
+            // deno-lint-ignore no-explicit-any
+            const response = new Response((await renderServerVNode(preparedModule, request, context).toUint8Array()) as any, {status:200})
             response.headers.set("content-type", "text/html; charset=utf-8")
             return response
         })
