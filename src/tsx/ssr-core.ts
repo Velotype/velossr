@@ -34,8 +34,10 @@ const encoder = new TextEncoder()
 
 /** Set of special characters that need escaping in HTML text */
 const encodedHtmlEntities = /["&<]/
+
 /** Regex of special characters that need escaping in HTML text */
 const encodedHtmlRegex = /["&<]/g
+
 /** Replace special HTML characters with HTML entities */
 function escapeHtmlText(str: string): string {
 	if (str.length === 0 || encodedHtmlEntities.test(str) === false) {
@@ -61,6 +63,7 @@ function escapeHtmlAttrValueText(str: string): string {
 
 /** Set of special characters that need escaping in HTML text */
 const invalidHtmlAttrNameChars = /[^-_:\.a-zA-Z0-9]/
+
 /** Remove invalid characters from HTML Attribute names */
 function cleanHtmlAttrNameText(str: string): string {
 	if (str.length === 0 || invalidHtmlAttrNameChars.test(str) === false) {
@@ -80,12 +83,12 @@ function attributeKeyConstructor([key, value]: [string, string]) {
  * A RenderedVNodeElement that will resolve async
  */
 export class AsyncRenderedVNodeElement {
-    promise: Promise<RenderedVNode>
+    promise: Promise<RenderedVDOM>
     result?: RenderedVNode = undefined
-    constructor(promise: Promise<RenderedVNode>) {
+    constructor(promise: Promise<RenderedVDOM>) {
         this.promise = promise
         promise.then(result => {
-            this.result = result
+            this.result = result.nodes
         })
     }
 }
@@ -100,13 +103,13 @@ export type RenderedVNodeElement = Uint8Array | AsyncRenderedVNodeElement
 export type RenderedVNode = RenderedVNodeElement | RenderedVNode[]
 
 /** A ServerVNode that has been compacted and prepared for rendering */
-export type PreparedServerVNodeElement = InternalDynamicServerComponent | AsyncRenderedVNodeElement | Uint8Array
+export type PreparedServerVNodeElement = InternalDynamicServerComponent | Uint8Array
 
 /** A ServerVNode that has been compacted and prepared for rendering */
 export type PreparedServerVNode = PreparedServerVNodeElement[]
 
 /** An individual element as part of a ServerVNode */
-export type ServerVNodeElement = HTMLElement | InternalDynamicServerComponent | AsyncRenderedVNodeElement | BasicTypes | null
+export type ServerVNodeElement = HTMLElement | InternalDynamicServerComponent | BasicTypes | null
 
 /** Virtual Node for use in SSR */
 export type ServerVNode = ServerVNodeElement | ServerVNode[]
@@ -141,7 +144,7 @@ export function prepareVNodeForRendering(node: ServerVNode): PreparedServerVNode
             nextString += node
         } else if (typeof node === 'boolean') {
             nextString += node
-        } else if (node instanceof InternalDynamicServerComponent || node instanceof AsyncRenderedVNodeElement || node instanceof Uint8Array) {
+        } else if (node instanceof InternalDynamicServerComponent || node instanceof Uint8Array) {
             if (nextString != "") {
                 output.push(encoder.encode(nextString))
                 nextString = ""
@@ -165,7 +168,7 @@ export function prepareVNodeForRendering(node: ServerVNode): PreparedServerVNode
     }
     return output
 }
-export function renderServerVNode(node: ServerVNode | PreparedServerVNode, request: Request, context: Context): RenderedVNode[] {
+export function renderServerVNode(node: ServerVNode | PreparedServerVNode, request: Request, context: Context): RenderedVDOM {
     const flatNodes: (ServerVNodeElement | PreparedServerVNodeElement)[] = []
     flattenArray(flatNodes, node)
     const output: RenderedVNode[] = []
@@ -180,7 +183,7 @@ export function renderServerVNode(node: ServerVNode | PreparedServerVNode, reque
             if (ret instanceof Promise) {
                 output.push(new AsyncRenderedVNodeElement(ret))
             } else {
-                output.push(ret)
+                output.push(ret.nodes)
             }
         } else if (node instanceof HTMLElement) {
             flatNodes.splice(index, 1, ...node.prepareElement())
@@ -195,7 +198,7 @@ export function renderServerVNode(node: ServerVNode | PreparedServerVNode, reque
             cont = false
         }
     }
-    return output
+    return new RenderedVDOM(output)
 }
 
 function escapeStringNode(node: ServerVNode): ServerVNode {
@@ -214,7 +217,7 @@ class InternalDynamicServerComponent {
         this.attrs = attrs
         this.children = children
     }
-    render(request: Request, context: Context): RenderedVNode[] | Promise<RenderedVNode[]> {
+    render(request: Request, context: Context): RenderedVDOM | Promise<RenderedVDOM> {
         const ret = this.component.render(this.attrs, this.children, request, context)
         if (ret instanceof Promise) {
             return new Promise(resolve => {
@@ -269,87 +272,96 @@ function concatenateUint8Arrays(uint8arrays: Uint8Array[]) {
     }
     return result
 }
-/**
- * Convert a RenderedVNode into a Uint8Array
- * 
- * Used for creating a `Response()` that returns all at once
- */
-export async function renderedVNodeToUint8Array(nodes: RenderedVNode): Promise<Uint8Array> {
-    const flatNodes: RenderedVNodeElement[] = []
-    flattenArray(flatNodes, nodes)
-    const bytes: Uint8Array[] = []
-    let index = 0
-    let cont = true
-    while(cont) {
-        const node = flatNodes[index]
-        if (node instanceof AsyncRenderedVNodeElement) {
-            const res = await node.promise
-            if (res instanceof Array) {
-                const flatRes: RenderedVNodeElement[] = []
-                flattenArray(flatRes, res)
-                flatNodes.splice(index, 1, ...flatRes)
-            } else {
-                flatNodes[index] = res
-            }
-            index--
-        } else {
-            bytes.push(node)
-        }
-        index++
-        if (index >= flatNodes.length) {
-            cont = false
-        }
+
+export class RenderedVDOM {
+    nodes: RenderedVNode
+    constructor(nodes: RenderedVNode) {
+        this.nodes = nodes
     }
-    return concatenateUint8Arrays(bytes)
-}
-/**
- * Convert a RenderedVNode into a ReadableStream
- * 
- * Used for creating a `Response()` that streams the response back to the client
- */
-export function renderedVNodeToReadableStream(nodes: RenderedVNode): ReadableStream {
-    const flatNodes: RenderedVNodeElement[] = []
-    flattenArray(flatNodes, nodes)
-    let index = 0
-    return new ReadableStream({
-        cancel: (reason) => {
-            console.error("ReadableStream failure", reason)
-        },
-        pull: (controller) => {
-            let cont = true
-            while(cont) {
-                const node = flatNodes[index]
-                if (node instanceof AsyncRenderedVNodeElement) {
-                    if (node.result) {
-                        if (node.result instanceof Array) {
-                            const flatRes: RenderedVNodeElement[] = []
-                            flattenArray(flatRes, node.result)
-                            flatNodes.splice(index, 1, ...flatRes)
-                        } else {
-                            flatNodes[index] = node.result
-                        }
-                        continue
-                    } else {
-                        return new Promise(resolve => {
-                            node.promise.finally(()=>{
-                                resolve()
-                            })
-                        })
-                    }
+
+    /**
+     * Convert into a Uint8Array
+     * 
+     * Used for creating a `Response()` that returns all at once
+     */
+    async toUint8Array(): Promise<Uint8Array> {
+        const flatNodes: RenderedVNodeElement[] = []
+        flattenArray(flatNodes, this.nodes)
+        const bytes: Uint8Array[] = []
+        let index = 0
+        let cont = true
+        while(cont) {
+            const node = flatNodes[index]
+            if (node instanceof AsyncRenderedVNodeElement) {
+                const res = (await node.promise).nodes
+                if (res instanceof Array) {
+                    const flatRes: RenderedVNodeElement[] = []
+                    flattenArray(flatRes, res)
+                    flatNodes.splice(index, 1, ...flatRes)
                 } else {
-                    controller.enqueue(node)
-                    index++
-                    if (index >= flatNodes.length) {
-                        cont = false
+                    flatNodes[index] = res
+                }
+                index--
+            } else {
+                bytes.push(node)
+            }
+            index++
+            if (index >= flatNodes.length) {
+                cont = false
+            }
+        }
+        return concatenateUint8Arrays(bytes)
+    }
+    /**
+     * Convert into a ReadableStream
+     * 
+     * Used for creating a `Response()` that streams the response back to the client
+     */
+    toReadableStream(): ReadableStream {
+        const flatNodes: RenderedVNodeElement[] = []
+        flattenArray(flatNodes, this.nodes)
+        let index = 0
+        return new ReadableStream({
+            cancel: (reason) => {
+                console.error("ReadableStream failure", reason)
+            },
+            pull: (controller) => {
+                let cont = true
+                while(cont) {
+                    const node = flatNodes[index]
+                    if (node instanceof AsyncRenderedVNodeElement) {
+                        if (node.result) {
+                            if (node.result instanceof Array) {
+                                const flatRes: RenderedVNodeElement[] = []
+                                flattenArray(flatRes, node.result)
+                                flatNodes.splice(index, 1, ...flatRes)
+                            } else {
+                                flatNodes[index] = node.result
+                            }
+                            continue
+                        } else {
+                            return new Promise(resolve => {
+                                node.promise.finally(()=>{
+                                    resolve()
+                                })
+                            })
+                        }
+                    } else {
+                        controller.enqueue(node)
+                        index++
+                        if (index >= flatNodes.length) {
+                            cont = false
+                        }
                     }
                 }
+                controller.close()
             }
-            controller.close()
-        }
-    }, {
-        highWaterMark: 10
-    })
+        }, {
+            highWaterMark: 10
+        })
+    }
 }
+
 /**
  * A VelotypeSSR Function Component that can be used in .tsx files to render HTML Components.
  * 
@@ -525,7 +537,7 @@ function escapeChildren(escapedChildren: PreparedServerVNode, children: ServerVN
             escapedChildren.push(...child.prepareElement())
         } else if (typeof child === "string") {
             escapedChildren.push(encoder.encode(escapeHtmlText(child)))
-        } else if (child instanceof InternalDynamicServerComponent || child instanceof AsyncRenderedVNodeElement) {
+        } else if (child instanceof InternalDynamicServerComponent) {
             escapedChildren.push(child)
         } else if (child !== null) {
             escapedChildren.push(encoder.encode(String(child)))
@@ -550,7 +562,7 @@ export function createElement(tag: any, attrs: Readonly<any>, ...children: Serve
         return new InternalDynamicServerComponent(new tag(notNullAttrs, children), notNullAttrs, children)
     } else if (typeof tag === 'function') {
         // Render Function component now
-        return tag(notNullAttrs, children)
+        return escapeStringNode(tag(notNullAttrs, children))
     } else if (typeof tag === 'string') {
         // Inline HTML Element
         return new HTMLElement(tag, attrs, children)

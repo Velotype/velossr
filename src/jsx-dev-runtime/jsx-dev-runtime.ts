@@ -32,8 +32,7 @@ import {
     prepareVNodeForRendering,
     prepareHTMLVNodeForRendering,
     renderServerVNode,
-    renderedVNodeToReadableStream,
-    renderedVNodeToUint8Array,
+    RenderedVDOM,
 
 } from "../tsx/ssr-core.ts"
 
@@ -69,8 +68,7 @@ export {
     prepareVNodeForRendering,
     prepareHTMLVNodeForRendering,
     renderServerVNode,
-    renderedVNodeToReadableStream,
-    renderedVNodeToUint8Array,
+    RenderedVDOM,
 
 }
 
