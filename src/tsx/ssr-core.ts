@@ -1,0 +1,567 @@
+// deno-lint-ignore-file no-explicit-any
+
+import type { Context } from "jsr:@velotype/veloserver"
+import type { StyleAttrType } from "../jsx-types/dom-types.d.ts"
+
+/** Type used to represent pass-through id to an underlying Element of a Component */
+export type IdAttr = {
+    /** An id to pass-through to the underlying Element of this Component */
+    id?: string
+}
+
+/** Type used to represent that children are accepted by a Component */
+export type ChildrenAttr = {
+    /** A ServerVNode to place as children of this Component */
+    children?: ServerVNode
+}
+
+/** Type used to represent pass-through style controls by a Component to an underlying Element */
+export type StylePassthroughAttrs = {
+    /** A string of CSS class names to pass-through to the underlying Element of this Component */
+    class?: string
+    /** CSS styles to pass-through to the underlying Element of this Component */
+    style?: StyleAttrType
+}
+
+/** Basic primitives that are renderable directly */
+export type BasicTypes = string | bigint | number | boolean
+
+/** Type used to represent that no Attrs are accepted for a Component */
+export type EmptyAttrs = Record<string | number | symbol, never>
+
+/** Text encoder for convertine strings to Uint8 */
+const encoder = new TextEncoder()
+
+/** Set of special characters that need escaping in HTML text */
+const encodedHtmlEntities = /["&<]/
+/** Regex of special characters that need escaping in HTML text */
+const encodedHtmlRegex = /["&<]/g
+/** Replace special HTML characters with HTML entities */
+function escapeHtmlText(str: string): string {
+	if (str.length === 0 || encodedHtmlEntities.test(str) === false) {
+        return str
+    }
+    return str.replace(encodedHtmlRegex, function(match: string): string {
+		if (match === '"') {
+			return '&quot;'
+        } else if (match === '&') {
+			return '&amp;'
+        }
+		return '&lt;'
+    })
+}
+
+/** Replace special characters needed in quoted HTML Attribute values with HTML entities */
+function escapeHtmlAttrValueText(str: string): string {
+	if (str.length === 0 || str.includes('"') === false) {
+        return str
+    }
+    return str.replaceAll('"', '&quot;')
+}
+
+/** Set of special characters that need escaping in HTML text */
+const invalidHtmlAttrNameChars = /[^-_:\.a-zA-Z0-9]/
+/** Remove invalid characters from HTML Attribute names */
+function cleanHtmlAttrNameText(str: string): string {
+	if (str.length === 0 || invalidHtmlAttrNameChars.test(str) === false) {
+        return str
+    }
+    return str.replace(/[^-_:\.a-zA-Z0-9]/g, '')
+}
+
+function attributeKeyConstructor([key, value]: [string, string]) {
+    if (value == "") {
+        return ` ${cleanHtmlAttrNameText(key)}`
+    }
+    return ` ${cleanHtmlAttrNameText(key)}="${escapeHtmlAttrValueText(value)}"`
+}
+
+/**
+ * A RenderedVNodeElement that will resolve async
+ */
+export class AsyncRenderedVNodeElement {
+    promise: Promise<RenderedVNode>
+    result?: RenderedVNode = undefined
+    constructor(promise: Promise<RenderedVNode>) {
+        this.promise = promise
+        promise.then(result => {
+            this.result = result
+        })
+    }
+}
+
+/**
+ * Either Bytes that are ready to append into a Response or an AsyncNode to await
+ * to then get Bytes instead
+ */
+export type RenderedVNodeElement = Uint8Array | AsyncRenderedVNodeElement
+
+/** Rendered VNodes that are ready for processing into a Response */
+export type RenderedVNode = RenderedVNodeElement | RenderedVNode[]
+
+/** A ServerVNode that has been compacted and prepared for rendering */
+export type PreparedServerVNodeElement = InternalDynamicServerComponent | AsyncRenderedVNodeElement | Uint8Array
+
+/** A ServerVNode that has been compacted and prepared for rendering */
+export type PreparedServerVNode = PreparedServerVNodeElement[]
+
+/** An individual element as part of a ServerVNode */
+export type ServerVNodeElement = HTMLElement | InternalDynamicServerComponent | AsyncRenderedVNodeElement | BasicTypes | null
+
+/** Virtual Node for use in SSR */
+export type ServerVNode = ServerVNodeElement | ServerVNode[]
+
+/**
+ * Prepare a ServerVNode for rendering, the output will be compacted and a flat array.
+ * 
+ * This will call `prepareVNodeForRendering()` with a prepended `<!DOCTYPE html>` to
+ * create a valid html document.
+ */
+export function prepareHTMLVNodeForRendering(node: ServerVNode): PreparedServerVNode {
+    return prepareVNodeForRendering(["<!DOCTYPE html>", node])
+}
+
+/**
+ * Prepare a ServerVNode for rendering, the output will be compacted and a flat array.
+ */
+export function prepareVNodeForRendering(node: ServerVNode): PreparedServerVNode {
+    const flatNodes: (ServerVNodeElement | PreparedServerVNodeElement)[] = []
+    flattenArray(flatNodes, node)
+    const output: PreparedServerVNode = []
+    let nextString: string = ""
+    let index = 0
+    let cont = true
+    while(cont) {
+        const node = flatNodes[index]
+        if (typeof node === 'string') {
+            nextString += node
+        } else if (typeof node === 'bigint') {
+            nextString += node
+        } else if (typeof node === 'number') {
+            nextString += node
+        } else if (typeof node === 'boolean') {
+            nextString += node
+        } else if (node instanceof InternalDynamicServerComponent || node instanceof AsyncRenderedVNodeElement || node instanceof Uint8Array) {
+            if (nextString != "") {
+                output.push(encoder.encode(nextString))
+                nextString = ""
+            }
+            output.push(node)
+        } else if (node instanceof HTMLElement) {
+            if (nextString != "") {
+                output.push(encoder.encode((nextString)))
+                nextString = ""
+            }
+            flatNodes.splice(index, 1, ...node.prepareElement())
+            index--
+        }
+        index++
+        if (index >= flatNodes.length) {
+            cont = false
+        }
+    }
+    if (nextString != "") {
+        output.push(encoder.encode(nextString))
+    }
+    return output
+}
+export function renderServerVNode(node: ServerVNode | PreparedServerVNode, request: Request, context: Context): RenderedVNode[] {
+    const flatNodes: (ServerVNodeElement | PreparedServerVNodeElement)[] = []
+    flattenArray(flatNodes, node)
+    const output: RenderedVNode[] = []
+    let index = 0
+    let cont = true
+    while(cont) {
+        const node = flatNodes[index]
+        if (typeof node === 'string') {
+            output.push(encoder.encode(node))
+        } else if (node instanceof InternalDynamicServerComponent) {
+            const ret = node.render(request, context)
+            if (ret instanceof Promise) {
+                output.push(new AsyncRenderedVNodeElement(ret))
+            } else {
+                output.push(ret)
+            }
+        } else if (node instanceof HTMLElement) {
+            flatNodes.splice(index, 1, ...node.prepareElement())
+            index--
+        } else if (node instanceof AsyncRenderedVNodeElement || node instanceof Uint8Array) {
+            output.push(node)
+        } else if (node !== null) {
+            output.push(encoder.encode(String(node)))
+        }
+        index++
+        if (index >= flatNodes.length) {
+            cont = false
+        }
+    }
+    return output
+}
+
+function escapeStringNode(node: ServerVNode): ServerVNode {
+    if (typeof node === "string") {
+        return escapeHtmlText(node)
+    }
+    return node
+}
+
+class InternalDynamicServerComponent {
+    component: DynamicServerComponent<any>
+    attrs: any
+    children: any[]
+    constructor(component: DynamicServerComponent<any>, attrs: any, children: any[]) {
+        this.component = component
+        this.attrs = attrs
+        this.children = children
+    }
+    render(request: Request, context: Context): RenderedVNode[] | Promise<RenderedVNode[]> {
+        const ret = this.component.render(this.attrs, this.children, request, context)
+        if (ret instanceof Promise) {
+            return new Promise(resolve => {
+                ret.then(data => {
+                    resolve(renderServerVNode(escapeStringNode(data), request, context))
+                })
+                ret.catch(reason => {
+                    resolve(renderServerVNode(escapeStringNode(this.component.onFail(reason, this.attrs, this.children, request, context)), request, context))
+                })
+            })
+        } else {
+            return renderServerVNode(escapeStringNode(ret), request, context)
+        }
+    }
+}
+
+/**
+ * Take a recursive array type and flatten it down into a single flat array
+ * 
+ * For example:
+ * 
+ * ```
+ * const x = [ [1, 2] , [[3]] , 4]
+ * const y = flattenArray(x)
+ * ```
+ * then `y` will equal `[1,2,3,4]`
+ */
+function flattenArray<T>(output: T[], node: any) {
+    if (node instanceof Array) {
+        for (const element of node) {
+            if (element instanceof Array) {
+                flattenArray(output, element)
+            } else {
+                output.push(element)
+            }
+        }
+    } else {
+        output.push(node)
+    }
+}
+
+/**
+ * Stitch up an array of Uint8Array into a single Uint8Array
+ */
+function concatenateUint8Arrays(uint8arrays: Uint8Array[]) {
+    const totalLength = uint8arrays.reduce(function(sum, arr) {return sum + arr.length}, 0)
+    const result = new Uint8Array(totalLength)
+    let offset = 0
+    for (const arr of uint8arrays) {
+        result.set(arr, offset)
+        offset += arr.length
+    }
+    return result
+}
+/**
+ * Convert a RenderedVNode into a Uint8Array
+ * 
+ * Used for creating a `Response()` that returns all at once
+ */
+export async function renderedVNodeToUint8Array(nodes: RenderedVNode): Promise<Uint8Array> {
+    const flatNodes: RenderedVNodeElement[] = []
+    flattenArray(flatNodes, nodes)
+    const bytes: Uint8Array[] = []
+    let index = 0
+    let cont = true
+    while(cont) {
+        const node = flatNodes[index]
+        if (node instanceof AsyncRenderedVNodeElement) {
+            const res = await node.promise
+            if (res instanceof Array) {
+                const flatRes: RenderedVNodeElement[] = []
+                flattenArray(flatRes, res)
+                flatNodes.splice(index, 1, ...flatRes)
+            } else {
+                flatNodes[index] = res
+            }
+            index--
+        } else {
+            bytes.push(node)
+        }
+        index++
+        if (index >= flatNodes.length) {
+            cont = false
+        }
+    }
+    return concatenateUint8Arrays(bytes)
+}
+/**
+ * Convert a RenderedVNode into a ReadableStream
+ * 
+ * Used for creating a `Response()` that streams the response back to the client
+ */
+export function renderedVNodeToReadableStream(nodes: RenderedVNode): ReadableStream {
+    const flatNodes: RenderedVNodeElement[] = []
+    flattenArray(flatNodes, nodes)
+    let index = 0
+    return new ReadableStream({
+        cancel: (reason) => {
+            console.error("ReadableStream failure", reason)
+        },
+        pull: (controller) => {
+            let cont = true
+            while(cont) {
+                const node = flatNodes[index]
+                if (node instanceof AsyncRenderedVNodeElement) {
+                    if (node.result) {
+                        if (node.result instanceof Array) {
+                            const flatRes: RenderedVNodeElement[] = []
+                            flattenArray(flatRes, node.result)
+                            flatNodes.splice(index, 1, ...flatRes)
+                        } else {
+                            flatNodes[index] = node.result
+                        }
+                        continue
+                    } else {
+                        return new Promise(resolve => {
+                            node.promise.finally(()=>{
+                                resolve()
+                            })
+                        })
+                    }
+                } else {
+                    controller.enqueue(node)
+                    index++
+                    if (index >= flatNodes.length) {
+                        cont = false
+                    }
+                }
+            }
+            controller.close()
+        }
+    }, {
+        highWaterMark: 10
+    })
+}
+/**
+ * A VelotypeSSR Function Component that can be used in .tsx files to render HTML Components.
+ * 
+ * This is equivalent with a StaticServerComponent<AttrsType>
+ */
+export type StaticServerFunctionComponent<AttrsType> = (attrs: Readonly<AttrsType>, children: ServerVNode[]) => ServerVNode[] | null | undefined
+/**
+ * A Static Component that is able to render without reference to the
+ * specific `request` and `context` of a server call
+ * 
+ * This is equivalent with a StaticServerFunctionComponent<AttrsType>
+ */
+export abstract class StaticServerComponent<AttrsType> {
+    attrs: Readonly<AttrsType>
+    children: Readonly<ServerVNode[]>
+    constructor(attrs: AttrsType, children: Readonly<ServerVNode[]>) {
+        this.attrs = attrs
+        this.children = children
+    }
+    abstract render(attrs: Readonly<AttrsType>, children: ServerVNode[]): ServerVNode
+}
+/**
+ * A Dynamic Component that needs the specific `request` and `context` in order
+ * to render a `Response` to the client
+ */
+export abstract class DynamicServerComponent<AttrsType> {
+    attrs: Readonly<AttrsType>
+    children: Readonly<ServerVNode[]>
+    constructor(attrs: Readonly<AttrsType>, children: Readonly<ServerVNode[]>) {
+        this.attrs = attrs
+        this.children = children
+    }
+    abstract render(attrs: Readonly<AttrsType>, children: Readonly<ServerVNode[]>, request: Request, context: Context): ServerVNode | Promise<ServerVNode>
+    onFail(reason: any, _attrs: Readonly<AttrsType>, _children: Readonly<ServerVNode[]>, _request: Request, _context: Context): ServerVNode {
+        console.error("DynamicServerComponent rendering failed", reason)
+        return null
+    }
+}
+/**
+ * A RenderObject that resolves asynchronously and can be rendered into
+ * multiple locations in the VDOM
+ */
+export class AsyncRenderObject<DataType> {
+    promise: Promise<DataType>
+    request: Request
+    context: Context
+    defaultOnFail: (reason: any, request: Request, context: Context) => ServerVNode
+    constructor(promise: Promise<DataType>, request: Request, context: Context, defaultOnFail?: (reason: any, request: Request, context: Context) => ServerVNode) {
+        this.promise = promise
+        this.request = request
+        this.context = context
+        if (defaultOnFail) {
+            this.defaultOnFail = defaultOnFail
+        } else {
+            this.defaultOnFail = (reason: any, _request: Request, _context: Context): ServerVNode => {
+                console.error("AsyncRenderObject rendering failed", reason)
+                return null
+            }
+        }
+    }
+    render(renderFunction: (data: DataType) => Promise<ServerVNode>, onFail?: (reason: any, request: Request, context: Context) => ServerVNode): AsyncRenderedVNodeElement {
+        return new AsyncRenderedVNodeElement(new Promise(resolve => {
+            this.promise.then(async data => {
+                try {
+                    resolve(renderServerVNode(escapeStringNode(await renderFunction(data)), this.request, this.context))
+                } catch (reason) {
+                    if (onFail) {
+                        resolve(renderServerVNode(escapeStringNode(onFail(reason, this.request, this.context)), this.request, this.context))
+                    } else {
+                        resolve(renderServerVNode(escapeStringNode(this.defaultOnFail(reason, this.request, this.context)), this.request, this.context))
+                    }
+                }
+            })
+        }))
+    }
+}
+
+/**
+ * Convert from lowerCamelCase to hypen-case
+ */
+const upperToHypenCase = function(text: string) {
+    return text.replace(/[A-Z]/g, function(char) {return "-"+char.toLowerCase()})
+}
+
+/**
+ * The Set of Void Elements in HTML (aka the set of elements that do not
+ * have a closing `</tag>`)
+ * 
+ * For example `<span><input></span>` is correct HTML and `<span><input></input></span>` is incorrect
+ * 
+ * Browsers will ignore a closing tag if present on Void Elements
+ * 
+ * Reference: https://developer.mozilla.org/en-US/docs/Glossary/Void_element
+ */
+const voidTags = new Set<string>()
+voidTags.add("area")
+voidTags.add("base")
+voidTags.add("br")
+voidTags.add("col")
+voidTags.add("embed")
+voidTags.add("hr")
+voidTags.add("img")
+voidTags.add("input")
+voidTags.add("link")
+voidTags.add("meta")
+// param is deprecated
+voidTags.add("source")
+voidTags.add("track")
+voidTags.add("wbr")
+
+/**
+ * A Server-side representation of an HTMLElement
+ */
+export class HTMLElement {
+    tag: string
+    attrs: any
+    children: ServerVNode[]
+    constructor(tag: string, attrs: any, children: ServerVNode[]) {
+        this.tag = tag
+        this.attrs = attrs
+        this.children = children
+    }
+    /**
+     * Prepare this HTMLElement for rendering
+     */
+    prepareElement(): PreparedServerVNode {
+        const attributes: Map<string,string> = new Map<string,string>()
+        for (const [name, value] of Object.entries(this.attrs || {})) {
+            if (name.startsWith('on')) {
+                //do nothing, can't use event listeners server-side
+                console.error("WARN, attempt to attach event listener when SSR rendering", this.tag, this.attrs)
+                // TODO: Revisit the idea of allowing inline javascript function attributes
+                /// deno-lint-ignore ban-types
+                //element.setAttribute(name,`(${(value as Function).toString().replaceAll('"','&quot;')})(...arguments);`)
+            } else {
+                // Special handling for style object
+                if (name == "style" && value instanceof Object) {
+                    // Special handling for style object
+                    const styleAttributes = []
+                    for (const key of Object.keys(value)) {
+                        styleAttributes.push(upperToHypenCase(key)+":"+value[key as keyof typeof value])
+                    }
+                    const styleValue = styleAttributes.join(";")
+                    attributes.set(name, styleValue)
+                } else if (typeof value == "boolean") {
+                    // Boolean true gets set to empty string, boolean false does not get set
+                    if (value) {
+                        attributes.set(name,"")
+                    }
+                } else if (value) {
+                    attributes.set(name, value.toString())
+                }
+            }
+        }
+        if (voidTags.has(this.tag)) {
+            return [encoder.encode(`<${this.tag}${Array.from(attributes.entries()).map(attributeKeyConstructor).join("")}>`)]
+        } else {
+            const escapedChildren: PreparedServerVNode = []
+            escapeChildren(escapedChildren, this.children)
+            return [encoder.encode(`<${this.tag}${Array.from(attributes.entries()).map(attributeKeyConstructor).join("")}>`), ...escapedChildren, encoder.encode(`</${this.tag}>`)]
+        }
+    }
+}
+
+/**
+ * Process a set of VNodes and string escape any `string` node to be safe HTML Text
+ */
+function escapeChildren(escapedChildren: PreparedServerVNode, children: ServerVNode[]) {
+    for (const child of children) {
+        if (child instanceof Array) {
+            escapeChildren(escapedChildren, child)
+        } else if (child instanceof HTMLElement) {
+            escapedChildren.push(...child.prepareElement())
+        } else if (typeof child === "string") {
+            escapedChildren.push(encoder.encode(escapeHtmlText(child)))
+        } else if (child instanceof InternalDynamicServerComponent || child instanceof AsyncRenderedVNodeElement) {
+            escapedChildren.push(child)
+        } else if (child !== null) {
+            escapedChildren.push(encoder.encode(String(child)))
+        }
+    }
+}
+
+/**
+ * Create an element with a tag, set it's attributes using attrs, then append children
+ * 
+ * ```tsx
+ * <tag attrOne={} attrTwo={}>{children}</tag>
+ * ```
+ */
+export function createElement(tag: any, attrs: Readonly<any>, ...children: ServerVNode[]): ServerVNode {
+    const notNullAttrs = attrs || {}
+    if (tag?.prototype instanceof StaticServerComponent) {
+        // Render StaticServerComponent now
+        return escapeStringNode((new tag(notNullAttrs, children)).render(notNullAttrs, children))
+    } if (tag?.prototype instanceof DynamicServerComponent) {
+        // Create InternalDynamicServerComponent for resolution later
+        return new InternalDynamicServerComponent(new tag(notNullAttrs, children), notNullAttrs, children)
+    } else if (typeof tag === 'function') {
+        // Render Function component now
+        return tag(notNullAttrs, children)
+    } else if (typeof tag === 'string') {
+        // Inline HTML Element
+        return new HTMLElement(tag, attrs, children)
+    }
+    console.error('Invalid tag', tag, notNullAttrs, children)
+    return []
+}
+
+/**
+ * Create an fragment \<></> (which just propagates an array of children[])
+ */
+export function createFragment(_attrs: any, ...children: ServerVNode[]): ServerVNode {
+    return children
+}
