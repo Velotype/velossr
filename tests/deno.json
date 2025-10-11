@@ -1,0 +1,13 @@
+{
+    "nodeModulesDir": "auto",
+    "imports": {
+        "@velotype/veloserver": "jsr:@velotype/veloserver@^0.0.2",
+        "jsr:@velotype/velossr/jsx-runtime": "../src/jsx-runtime/jsx-runtime.ts",
+        "jsr:@velotype/velossr": "../src/jsx-runtime/jsx-runtime.ts"
+    },
+    "lint": {
+        "rules": {
+            "exclude": ["jsx-key"]
+        }
+    }
+}
