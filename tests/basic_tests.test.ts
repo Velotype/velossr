@@ -36,7 +36,23 @@ describe('basic component rendering', () => {
         it({name,
             fn: async () => {
                 try {
-                    await page.goto(`${baseUrl}/${module}`, {waitUntil: 'networkidle2'})
+                    await page.goto(`${baseUrl}/sync/${module}`, {waitUntil: 'networkidle2'})
+                    const selection = await page.waitForSelector(selector)
+                    if (selection) {
+                        await testFn(selection)
+                    } else {
+                        fail(`ERROR: Selector not found: ${selector}`)
+                    }
+                } catch (e) {
+                    console.log("Exception",e)
+                    fail("ERROR: Thrown exception")
+                }
+            }
+        })
+        it({name,
+            fn: async () => {
+                try {
+                    await page.goto(`${baseUrl}/stream/${module}`, {waitUntil: 'networkidle2'})
                     const selection = await page.waitForSelector(selector)
                     if (selection) {
                         await testFn(selection)
@@ -96,10 +112,23 @@ describe('basic component rendering', () => {
         ]
         await testVariations(setOfVariations)
     })
-    it({name: "basic-dynamic renders timely", fn: async () => {
+    it({name: "sync basic-dynamic renders timely", fn: async () => {
         try {
             const startTime = performance.now()
-            await page.goto(`${baseUrl}/basic-dynamic`, {waitUntil: 'networkidle2'})
+            await page.goto(`${baseUrl}/sync/basic-dynamic`, {waitUntil: 'networkidle2'})
+            await page.waitForSelector("#hello-dynamic-div")
+            const time = performance.now() - startTime
+            console.log("time",time)
+            assertLess(time, 2000)
+        } catch (e) {
+            console.log("Exception",e)
+            fail("ERROR: Thrown exception")
+        }
+    }})
+    it({name: "stream basic-dynamic renders timely", fn: async () => {
+        try {
+            const startTime = performance.now()
+            await page.goto(`${baseUrl}/stream/basic-dynamic`, {waitUntil: 'networkidle2'})
             await page.waitForSelector("#hello-dynamic-div")
             const time = performance.now() - startTime
             console.log("time",time)
