@@ -10,7 +10,10 @@ export class BasicNav extends StaticServerComponent<BasicNavAttrsType> {
     override render(attrs: BasicNavAttrsType) {
         return <div>
             <div><a href="/">Home</a></div>
-            {attrs.modules.map(module=><div><a href={`/${module.name}`}>{module.name}</a></div>)}
+            {attrs.modules.map(module=> <>
+                <div><a href={`/sync/${module.name}`}>sync {module.name}</a></div>
+                <div><a href={`/stream/${module.name}`}>stream {module.name}</a></div>
+            </>)}
         </div>
     }
 }

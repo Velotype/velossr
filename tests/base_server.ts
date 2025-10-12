@@ -32,15 +32,23 @@ export function startAppServer(server_port: number): Promise<App> {
     }]
     setOfModules.forEach((module) => {
         const preparedModule = prepareHTMLVNodeForRendering(createElement(BasicPage,{modules: setOfModules},createElement(module.page,{})))
-        router.get(`/${module.name}`, async (request: Request, context: Context) => {
+        router.get(`/sync/${module.name}`, async (request: Request, context: Context) => {
             const response = new Response(await renderServerVNode(preparedModule, request, context).toArrayBuffer(), {status:200})
+            response.headers.set("content-type", "text/html; charset=utf-8")
+            return response
+        })
+    })
+    setOfModules.forEach((module) => {
+        const preparedModule = prepareHTMLVNodeForRendering(createElement(BasicPage,{modules: setOfModules},createElement(module.page,{})))
+        router.get(`/stream/${module.name}`, async (request: Request, context: Context) => {
+            const response = new Response(await renderServerVNode(preparedModule, request, context).toReadableStream(), {status:200})
             response.headers.set("content-type", "text/html; charset=utf-8")
             return response
         })
     })
     router.get('/', function() {
         const response = new Response(`<!DOCTYPE html><html><body>
-${setOfModules.map(module => `<div><a href="/${module.name}">${module.name}</a></div>`).join('')}
+${setOfModules.map(module => `<div><a href="/sync/${module.name}">sync ${module.name}</a></div><div><a href="/stream/${module.name}">stream ${module.name}</a></div>`).join('')}
 </body></html>`,{status:200})
         response.headers.set("content-type", "text/html; charset=utf-8")
         return response
