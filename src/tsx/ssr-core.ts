@@ -82,12 +82,15 @@ function attributeKeyConstructor([key, value]: [string, string]) {
  * A RenderedVNodeElement that will resolve async
  */
 export class AsyncRenderedVNodeElement {
+    /** The underlying Promise that this node depends on */
     promise: Promise<RenderedVDOM>
+    /** If the Promise has resolved then the resulting RenderedVNode is captured here */
     result?: RenderedVNode = undefined
+    /** Create a new AsyncRenderedVNodeElement */
     constructor(promise: Promise<RenderedVDOM>) {
         this.promise = promise
         promise.then(result => {
-            this.result = result.nodes
+            this.result = result.node
         })
     }
 }
@@ -102,13 +105,13 @@ export type RenderedVNodeElement = Uint8Array | AsyncRenderedVNodeElement
 export type RenderedVNode = RenderedVNodeElement | RenderedVNode[]
 
 /** A ServerVNode that has been compacted and prepared for rendering */
-export type PreparedServerVNodeElement = InternalDynamicServerComponent | Uint8Array
+export type PreparedServerVNodeElement = DynamicVNodeElement | Uint8Array
 
 /** A ServerVNode that has been compacted and prepared for rendering */
 export type PreparedServerVNode = PreparedServerVNodeElement[]
 
 /** An individual element as part of a ServerVNode */
-export type ServerVNodeElement = HTMLElement | InternalDynamicServerComponent | BasicTypes | null
+export type ServerVNodeElement = HTMLElement | DynamicVNodeElement | BasicTypes | null
 
 /** Virtual Node for use in SSR */
 export type ServerVNode = ServerVNodeElement | ServerVNode[]
@@ -143,7 +146,7 @@ export function prepareVNodeForRendering(node: ServerVNode): PreparedServerVNode
             nextString += node
         } else if (typeof node === 'boolean') {
             nextString += node
-        } else if (node instanceof InternalDynamicServerComponent || node instanceof Uint8Array) {
+        } else if (node instanceof DynamicVNodeElement || node instanceof Uint8Array) {
             if (nextString != "") {
                 output.push(encoder.encode(nextString))
                 nextString = ""
@@ -167,6 +170,10 @@ export function prepareVNodeForRendering(node: ServerVNode): PreparedServerVNode
     }
     return output
 }
+
+/**
+ * Transforms VNodes (either prepared or raw) into RenderedVDOM
+ */
 export function renderServerVNode(node: ServerVNode | PreparedServerVNode, request: Request, context: any): RenderedVDOM {
     const flatNodes: (ServerVNodeElement | PreparedServerVNodeElement)[] = []
     flattenArray(flatNodes, node)
@@ -177,12 +184,12 @@ export function renderServerVNode(node: ServerVNode | PreparedServerVNode, reque
         const node = flatNodes[index]
         if (typeof node === 'string') {
             output.push(encoder.encode(node))
-        } else if (node instanceof InternalDynamicServerComponent) {
+        } else if (node instanceof DynamicVNodeElement) {
             const ret = node.render(request, context)
             if (ret instanceof Promise) {
                 output.push(new AsyncRenderedVNodeElement(ret))
             } else {
-                output.push(ret.nodes)
+                output.push(ret.node)
             }
         } else if (node instanceof HTMLElement) {
             flatNodes.splice(index, 1, ...node.prepareElement())
@@ -207,15 +214,23 @@ function escapeStringNode(node: ServerVNode): ServerVNode {
     return node
 }
 
-class InternalDynamicServerComponent {
+/**
+ * A Dynamic VNode that requires a Request and Context in order to render
+ */
+export class DynamicVNodeElement {
+    /** A link to the referenced Component */
     component: DynamicServerComponent<any>
-    attrs: any
-    children: any[]
-    constructor(component: DynamicServerComponent<any>, attrs: any, children: any[]) {
+    /** The attrs for this VNode */
+    attrs: Readonly<any>
+    /** The children for this VNode */
+    children: Readonly<any[]>
+    /** Create a new DynamicVNodeElement */
+    constructor(component: DynamicServerComponent<any>, attrs: Readonly<any>, children: Readonly<any[]>) {
         this.component = component
         this.attrs = attrs
         this.children = children
     }
+    /** Render this VNodeElement with the given Request and Context */
     render(request: Request, context: any): RenderedVDOM | Promise<RenderedVDOM> {
         const ret = this.component.render(this.attrs, this.children, request, context)
         if (ret instanceof Promise) {
@@ -272,27 +287,47 @@ function concatenateUint8Arrays(uint8arrays: Uint8Array[]) {
     return result
 }
 
+/**
+ * Stitch up an array of Uint8Array into a single ArrayBuffer
+ */
+function concatenateUint8ArraysToArrayBuffer(uint8arrays: Uint8Array[]) {
+    const totalLength = uint8arrays.reduce(function(sum, arr) {return sum + arr.length}, 0)
+    const arrayBuffer = new ArrayBuffer(totalLength)
+    const result = new Uint8Array(arrayBuffer)
+    let offset = 0
+    for (const arr of uint8arrays) {
+        result.set(arr, offset)
+        offset += arr.length
+    }
+    return arrayBuffer
+}
+
+/**
+ * A rendered RenderedVNode with a set of methods to convert into other formats
+ */
 export class RenderedVDOM {
-    nodes: RenderedVNode
+    /** The RenderedVNode this VDOM wraps */
+    node: RenderedVNode
+    /** Create a new RenderedVDOM */
     constructor(nodes: RenderedVNode) {
-        this.nodes = nodes
+        this.node = nodes
     }
 
     /**
-     * Convert into a Uint8Array
+     * Convert into a Uint8Array[]
      * 
      * Used for creating a `Response()` that returns all at once
      */
-    async toUint8Array(): Promise<Uint8Array> {
+    async #toUint8ArrayArray(): Promise<Uint8Array[]> {
         const flatNodes: RenderedVNodeElement[] = []
-        flattenArray(flatNodes, this.nodes)
+        flattenArray(flatNodes, this.node)
         const bytes: Uint8Array[] = []
         let index = 0
         let cont = true
         while(cont) {
             const node = flatNodes[index]
             if (node instanceof AsyncRenderedVNodeElement) {
-                const res = (await node.promise).nodes
+                const res = (await node.promise).node
                 if (res instanceof Array) {
                     const flatRes: RenderedVNodeElement[] = []
                     flattenArray(flatRes, res)
@@ -309,7 +344,22 @@ export class RenderedVDOM {
                 cont = false
             }
         }
-        return concatenateUint8Arrays(bytes)
+        return bytes
+    }
+
+    /**
+     * Convert into a single Uint8Array
+     */
+    async toUint8Array(): Promise<Uint8Array> {
+        return concatenateUint8Arrays(await this.#toUint8ArrayArray())
+    }
+    /**
+     * Convert into an ArrayBuffer
+     * 
+     * Used for creating a `Response()` that returns all at once
+     */
+    async toArrayBuffer(): Promise<ArrayBuffer> {
+        return concatenateUint8ArraysToArrayBuffer(await this.#toUint8ArrayArray())
     }
     /**
      * Convert into a ReadableStream
@@ -318,7 +368,7 @@ export class RenderedVDOM {
      */
     toReadableStream(): ReadableStream {
         const flatNodes: RenderedVNodeElement[] = []
-        flattenArray(flatNodes, this.nodes)
+        flattenArray(flatNodes, this.node)
         let index = 0
         return new ReadableStream({
             cancel: (reason) => {
@@ -374,12 +424,22 @@ export type StaticServerFunctionComponent<AttrsType> = (attrs: Readonly<AttrsTyp
  * This is equivalent with a StaticServerFunctionComponent<AttrsType>
  */
 export abstract class StaticServerComponent<AttrsType> {
+    /** The attrs for this Component */
     attrs: Readonly<AttrsType>
+    /** The children for this Component */
     children: Readonly<ServerVNode[]>
+    /**
+     * Create a new StaticServerComponent
+     * 
+     * Should not need to be called directly
+     */
     constructor(attrs: AttrsType, children: Readonly<ServerVNode[]>) {
         this.attrs = attrs
         this.children = children
     }
+    /**
+     * Render this Component given a set of attrs and children
+     */
     abstract render(attrs: Readonly<AttrsType>, children: ServerVNode[]): ServerVNode
 }
 /**
@@ -387,14 +447,33 @@ export abstract class StaticServerComponent<AttrsType> {
  * to render a `Response` to the client
  */
 export abstract class DynamicServerComponent<AttrsType> {
+    /** The attrs for this Component */
     attrs: Readonly<AttrsType>
+    /** The children for this Component */
     children: Readonly<ServerVNode[]>
+    /**
+     * Create a new DynamicServerComponent
+     * 
+     * Should not need to be called directly
+     */
     constructor(attrs: Readonly<AttrsType>, children: Readonly<ServerVNode[]>) {
         this.attrs = attrs
         this.children = children
     }
+    /**
+     * Render this Component given a set of attrs, children, as well as a request and context
+     * 
+     * May return sync or async
+     */
     abstract render(attrs: Readonly<AttrsType>, children: Readonly<ServerVNode[]>, request: Request, context: any): ServerVNode | Promise<ServerVNode>
-    onFail(reason: any, _attrs: Readonly<AttrsType>, _children: Readonly<ServerVNode[]>, _request: Request, _context: any): ServerVNode {
+    /**
+     * In the case that `render()` returns async and fails, then this `onFail()` function
+     * is called with the `reason` from the failed Promise
+     * 
+     * The default behavior will resolve in the Component not rendering anything, though can be
+     * overridden to display a relevant error message to the user.
+     */
+    onFail(reason: Readonly<any>, _attrs: Readonly<AttrsType>, _children: Readonly<ServerVNode[]>, _request: Request, _context: any): ServerVNode {
         console.error("DynamicServerComponent rendering failed", reason)
         return null
     }
@@ -404,29 +483,38 @@ export abstract class DynamicServerComponent<AttrsType> {
  * multiple locations in the VDOM
  */
 export class AsyncRenderObject<DataType> {
+    /** The Promise this Async object is waiting on */
     promise: Promise<DataType>
+    /** The Request used in this render pass */
     request: Request
+    /** The Context used in this render pass */
     context: any
-    defaultOnFail: (reason: any, request: Request, context: any) => ServerVNode
-    constructor(promise: Promise<DataType>, request: Request, context: any, defaultOnFail?: (reason: any, request: Request, context: any) => ServerVNode) {
+    /** A default onFail function used for all cases where `render()` is called on this RenderObject */
+    defaultOnFail: (reason: Readonly<any>, request: Request, context: any) => ServerVNode
+    /** Create a new AsyncRenderObject */
+    constructor(promise: Promise<DataType>, request: Request, context: any, defaultOnFail?: (reason: Readonly<any>, request: Request, context: any) => ServerVNode) {
         this.promise = promise
         this.request = request
         this.context = context
         if (defaultOnFail) {
             this.defaultOnFail = defaultOnFail
         } else {
-            this.defaultOnFail = (reason: any, _request: Request, _context: any): ServerVNode => {
+            this.defaultOnFail = function(reason: Readonly<any>, _request: Request, _context: any): ServerVNode {
                 console.error("AsyncRenderObject rendering failed", reason)
                 return null
             }
         }
     }
-    render(renderFunction: (data: DataType) => Promise<ServerVNode>, onFail?: (reason: any, request: Request, context: any) => ServerVNode): AsyncRenderedVNodeElement {
+    /**
+     * Render this AsyncRenderObject into a VNode with the fiven `renderFunction()`
+     * when the AsyncRenderObject's Promise resolves
+     */
+    render(renderFunction: (data: DataType) => Promise<ServerVNode>, onFail?: (reason: Readonly<any>, request: Request, context: any) => ServerVNode): AsyncRenderedVNodeElement {
         return new AsyncRenderedVNodeElement(new Promise(resolve => {
             this.promise.then(async data => {
                 try {
                     resolve(renderServerVNode(escapeStringNode(await renderFunction(data)), this.request, this.context))
-                } catch (reason) {
+                } catch (reason: any) {
                     if (onFail) {
                         resolve(renderServerVNode(escapeStringNode(onFail(reason, this.request, this.context)), this.request, this.context))
                     } else {
@@ -475,10 +563,14 @@ voidTags.add("wbr")
  * A Server-side representation of an HTMLElement
  */
 export class HTMLElement {
+    /** The tag for this HTMLElement */
     tag: string
-    attrs: any
-    children: ServerVNode[]
-    constructor(tag: string, attrs: any, children: ServerVNode[]) {
+    /** The attrs for this HTMLElement */
+    attrs: Readonly<any>
+    /** The children for this HTMLElement */
+    children: Readonly<ServerVNode[]>
+    /** Create a new HTMLElement */
+    constructor(tag: string, attrs: Readonly<any>, children: Readonly<ServerVNode[]>) {
         this.tag = tag
         this.attrs = attrs
         this.children = children
@@ -528,7 +620,7 @@ export class HTMLElement {
 /**
  * Process a set of VNodes and string escape any `string` node to be safe HTML Text
  */
-function escapeChildren(escapedChildren: PreparedServerVNode, children: ServerVNode[]) {
+function escapeChildren(escapedChildren: PreparedServerVNode, children: Readonly<ServerVNode[]>) {
     for (const child of children) {
         if (child instanceof Array) {
             escapeChildren(escapedChildren, child)
@@ -536,7 +628,7 @@ function escapeChildren(escapedChildren: PreparedServerVNode, children: ServerVN
             escapedChildren.push(...child.prepareElement())
         } else if (typeof child === "string") {
             escapedChildren.push(encoder.encode(escapeHtmlText(child)))
-        } else if (child instanceof InternalDynamicServerComponent) {
+        } else if (child instanceof DynamicVNodeElement) {
             escapedChildren.push(child)
         } else if (child !== null) {
             escapedChildren.push(encoder.encode(String(child)))
@@ -551,14 +643,14 @@ function escapeChildren(escapedChildren: PreparedServerVNode, children: ServerVN
  * <tag attrOne={} attrTwo={}>{children}</tag>
  * ```
  */
-export function createElement(tag: any, attrs: Readonly<any>, ...children: ServerVNode[]): ServerVNode {
+export function createElement(tag: any, attrs: Readonly<any>, ...children: Readonly<ServerVNode[]>): ServerVNode {
     const notNullAttrs = attrs || {}
     if (tag?.prototype instanceof StaticServerComponent) {
         // Render StaticServerComponent now
         return escapeStringNode((new tag(notNullAttrs, children)).render(notNullAttrs, children))
     } if (tag?.prototype instanceof DynamicServerComponent) {
         // Create InternalDynamicServerComponent for resolution later
-        return new InternalDynamicServerComponent(new tag(notNullAttrs, children), notNullAttrs, children)
+        return new DynamicVNodeElement(new tag(notNullAttrs, children), notNullAttrs, children)
     } else if (typeof tag === 'function') {
         // Render Function component now
         return escapeStringNode(tag(notNullAttrs, children))

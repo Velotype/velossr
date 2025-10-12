@@ -33,9 +33,7 @@ export function startAppServer(server_port: number): Promise<App> {
     setOfModules.forEach((module) => {
         const preparedModule = prepareHTMLVNodeForRendering(createElement(BasicPage,{modules: setOfModules},createElement(module.page,{})))
         router.get(`/${module.name}`, async (request: Request, context: Context) => {
-            // TODO this type cast is a workaround ... needs fixing
-            // deno-lint-ignore no-explicit-any
-            const response = new Response((await renderServerVNode(preparedModule, request, context).toUint8Array()) as any, {status:200})
+            const response = new Response(await renderServerVNode(preparedModule, request, context).toArrayBuffer(), {status:200})
             response.headers.set("content-type", "text/html; charset=utf-8")
             return response
         })

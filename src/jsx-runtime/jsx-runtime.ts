@@ -5,7 +5,11 @@ import {
     // Engine types
     type BasicTypes,
     type AsyncRenderedVNodeElement,
+    HTMLElement,
+
+    type RenderedVNodeElement,
     type RenderedVNode,
+    type ServerVNodeElement,
     type ServerVNode,
     type PreparedServerVNodeElement,
     type PreparedServerVNode,
@@ -23,6 +27,7 @@ import {
 
     // Specialized
     type AsyncRenderObject,
+    DynamicVNodeElement,
 
     // TSX integration
     createElement,
@@ -32,6 +37,7 @@ import {
     prepareVNodeForRendering,
     prepareHTMLVNodeForRendering,
     renderServerVNode,
+
     RenderedVDOM,
 
 } from "../tsx/ssr-core.ts"
@@ -41,7 +47,11 @@ export {
     // Engine types
     type BasicTypes,
     type AsyncRenderedVNodeElement,
+    HTMLElement,
+
+    type RenderedVNodeElement,
     type RenderedVNode,
+    type ServerVNodeElement,
     type ServerVNode,
     type PreparedServerVNodeElement,
     type PreparedServerVNode,
@@ -59,6 +69,7 @@ export {
 
     // Specialized
     type AsyncRenderObject,
+    DynamicVNodeElement,
 
     // TSX integration
     createElement,
