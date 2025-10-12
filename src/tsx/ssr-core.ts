@@ -1,6 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
 
-import type { Context } from "jsr:@velotype/veloserver"
 import type { StyleAttrType } from "../jsx-types/dom-types.d.ts"
 
 /** Type used to represent pass-through id to an underlying Element of a Component */
@@ -168,7 +167,7 @@ export function prepareVNodeForRendering(node: ServerVNode): PreparedServerVNode
     }
     return output
 }
-export function renderServerVNode(node: ServerVNode | PreparedServerVNode, request: Request, context: Context): RenderedVDOM {
+export function renderServerVNode(node: ServerVNode | PreparedServerVNode, request: Request, context: any): RenderedVDOM {
     const flatNodes: (ServerVNodeElement | PreparedServerVNodeElement)[] = []
     flattenArray(flatNodes, node)
     const output: RenderedVNode[] = []
@@ -217,7 +216,7 @@ class InternalDynamicServerComponent {
         this.attrs = attrs
         this.children = children
     }
-    render(request: Request, context: Context): RenderedVDOM | Promise<RenderedVDOM> {
+    render(request: Request, context: any): RenderedVDOM | Promise<RenderedVDOM> {
         const ret = this.component.render(this.attrs, this.children, request, context)
         if (ret instanceof Promise) {
             return new Promise(resolve => {
@@ -394,8 +393,8 @@ export abstract class DynamicServerComponent<AttrsType> {
         this.attrs = attrs
         this.children = children
     }
-    abstract render(attrs: Readonly<AttrsType>, children: Readonly<ServerVNode[]>, request: Request, context: Context): ServerVNode | Promise<ServerVNode>
-    onFail(reason: any, _attrs: Readonly<AttrsType>, _children: Readonly<ServerVNode[]>, _request: Request, _context: Context): ServerVNode {
+    abstract render(attrs: Readonly<AttrsType>, children: Readonly<ServerVNode[]>, request: Request, context: any): ServerVNode | Promise<ServerVNode>
+    onFail(reason: any, _attrs: Readonly<AttrsType>, _children: Readonly<ServerVNode[]>, _request: Request, _context: any): ServerVNode {
         console.error("DynamicServerComponent rendering failed", reason)
         return null
     }
@@ -407,22 +406,22 @@ export abstract class DynamicServerComponent<AttrsType> {
 export class AsyncRenderObject<DataType> {
     promise: Promise<DataType>
     request: Request
-    context: Context
-    defaultOnFail: (reason: any, request: Request, context: Context) => ServerVNode
-    constructor(promise: Promise<DataType>, request: Request, context: Context, defaultOnFail?: (reason: any, request: Request, context: Context) => ServerVNode) {
+    context: any
+    defaultOnFail: (reason: any, request: Request, context: any) => ServerVNode
+    constructor(promise: Promise<DataType>, request: Request, context: any, defaultOnFail?: (reason: any, request: Request, context: any) => ServerVNode) {
         this.promise = promise
         this.request = request
         this.context = context
         if (defaultOnFail) {
             this.defaultOnFail = defaultOnFail
         } else {
-            this.defaultOnFail = (reason: any, _request: Request, _context: Context): ServerVNode => {
+            this.defaultOnFail = (reason: any, _request: Request, _context: any): ServerVNode => {
                 console.error("AsyncRenderObject rendering failed", reason)
                 return null
             }
         }
     }
-    render(renderFunction: (data: DataType) => Promise<ServerVNode>, onFail?: (reason: any, request: Request, context: Context) => ServerVNode): AsyncRenderedVNodeElement {
+    render(renderFunction: (data: DataType) => Promise<ServerVNode>, onFail?: (reason: any, request: Request, context: any) => ServerVNode): AsyncRenderedVNodeElement {
         return new AsyncRenderedVNodeElement(new Promise(resolve => {
             this.promise.then(async data => {
                 try {
