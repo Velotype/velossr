@@ -60,15 +60,17 @@ function escapeHtmlAttrValueText(str: string): string {
     return str.replaceAll('"', '&quot;')
 }
 
-/** Set of special characters that need escaping in HTML text */
+/** Set of special characters that need escaping in HTML Attribute name */
 const invalidHtmlAttrNameChars = /[^-_:\.a-zA-Z0-9]/
+/** Set of special characters that need escaping in HTML Attribute name */
+const invalidHtmlAttrNameCharsGlobal = /[^-_:\.a-zA-Z0-9]/g
 
 /** Remove invalid characters from HTML Attribute names */
 function cleanHtmlAttrNameText(str: string): string {
 	if (str.length === 0 || invalidHtmlAttrNameChars.test(str) === false) {
         return str
     }
-    return str.replace(/[^-_:\.a-zA-Z0-9]/g, '')
+    return str.replace(invalidHtmlAttrNameCharsGlobal, '')
 }
 
 function attributeKeyConstructor([key, value]: [string, string]) {
