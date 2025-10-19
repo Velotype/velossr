@@ -112,6 +112,38 @@ describe('basic component rendering', () => {
         ]
         await testVariations(setOfVariations)
     })
+    itWrap("set of basic-throw-sync tests", "basic-throw-sync", "#after-content", async (_pageLoadSelection: ElementHandle) => {
+        const setOfVariations = [
+            {selector: "#before-content", html: "before content"},
+            {selector: "#throw-content", html: "throw content"},
+            {selector: "#after-content", html: "after content"},
+        ]
+        await testVariations(setOfVariations)
+    })
+    itWrap("set of basic-throw-sync tests", "basic-throw-sync", "#after-content", async (_pageLoadSelection: ElementHandle) => {
+        const setOfVariations = [
+            {selector: "#before-content", html: "before content"},
+            {selector: "#throw-content", html: "throw content"},
+            {selector: "#after-content", html: "after content"},
+        ]
+        await testVariations(setOfVariations)
+    })
+    itWrap("set of basic-throw-async tests", "basic-throw-async?throw", "#after-content", async (_pageLoadSelection: ElementHandle) => {
+        const setOfVariations = [
+            {selector: "#before-content", html: "before content"},
+            {selector: "#outer-throw-content", html: ""},
+            {selector: "#after-content", html: "after content"},
+        ]
+        await testVariations(setOfVariations)
+    })
+    itWrap("set of basic-throw-async tests", "basic-throw-async?throw", "#after-content", async (_pageLoadSelection: ElementHandle) => {
+        const setOfVariations = [
+            {selector: "#before-content", html: "before content"},
+            {selector: "#outer-throw-content", html: ""},
+            {selector: "#after-content", html: "after content"},
+        ]
+        await testVariations(setOfVariations)
+    })
     it({name: "sync basic-dynamic renders timely", fn: async () => {
         try {
             const startTime = performance.now()

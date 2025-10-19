@@ -1,5 +1,5 @@
 import { App, Context, Inspector, RequestInspectorResponse, Router } from "jsr:@velotype/veloserver"
-import { BasicStaticTest, BasicDynamicTest, BasicPage } from "./test_modules/basic-div.tsx"
+import { BasicStaticTest, BasicDynamicTest, BasicPage, BasicThrowSyncTest, BasicThrowASyncTest } from "./test_modules/basic-div.tsx"
 import { createElement, prepareHTMLVNodeForRendering, renderServerVNode } from "jsr:@velotype/velossr/jsx-runtime"
 
 export function startAppServer(server_port: number): Promise<App> {
@@ -29,6 +29,12 @@ export function startAppServer(server_port: number): Promise<App> {
     }, {
         name: "basic-dynamic",
         page: BasicDynamicTest
+    }, {
+        name: "basic-throw-sync",
+        page: BasicThrowSyncTest
+    }, {
+        name: "basic-throw-async",
+        page: BasicThrowASyncTest
     }]
     setOfModules.forEach((module) => {
         const preparedModule = prepareHTMLVNodeForRendering(createElement(BasicPage,{modules: setOfModules},createElement(module.page,{})))
@@ -40,8 +46,8 @@ export function startAppServer(server_port: number): Promise<App> {
     })
     setOfModules.forEach((module) => {
         const preparedModule = prepareHTMLVNodeForRendering(createElement(BasicPage,{modules: setOfModules},createElement(module.page,{})))
-        router.get(`/stream/${module.name}`, async (request: Request, context: Context) => {
-            const response = new Response(await renderServerVNode(preparedModule, request, context).toReadableStream(), {status:200})
+        router.get(`/stream/${module.name}`, (request: Request, context: Context) => {
+            const response = new Response(renderServerVNode(preparedModule, request, context).toReadableStream(), {status:200})
             response.headers.set("content-type", "text/html; charset=utf-8")
             return response
         })

@@ -187,12 +187,7 @@ export function renderServerVNode(node: ServerVNode | PreparedServerVNode, reque
         if (typeof node === 'string') {
             output.push(encoder.encode(node))
         } else if (node instanceof DynamicVNodeElement) {
-            const ret = node.render(request, context)
-            if (ret instanceof Promise) {
-                output.push(new AsyncRenderedVNodeElement(ret))
-            } else {
-                output.push(ret.node)
-            }
+            output.push(new AsyncRenderedVNodeElement(node.render(request, context)))
         } else if (node instanceof HTMLElement) {
             flatNodes.splice(index, 1, ...node.prepareElement())
             index--
@@ -233,19 +228,16 @@ export class DynamicVNodeElement {
         this.children = children
     }
     /** Render this VNodeElement with the given Request and Context */
-    render(request: Request, context: any): RenderedVDOM | Promise<RenderedVDOM> {
-        const ret = this.component.render(this.attrs, this.children, request, context)
-        if (ret instanceof Promise) {
-            return new Promise(resolve => {
-                ret.then(data => {
-                    resolve(renderServerVNode(escapeStringNode(data), request, context))
-                })
-                ret.catch(reason => {
-                    resolve(renderServerVNode(escapeStringNode(this.component.onFail(reason, this.attrs, this.children, request, context)), request, context))
-                })
-            })
-        } else {
-            return renderServerVNode(escapeStringNode(ret), request, context)
+    async render(request: Request, context: any): Promise<RenderedVDOM> {
+        try {
+            const ret = this.component.render(this.attrs, this.children, request, context)
+            if (ret instanceof Promise) {
+                return renderServerVNode(escapeStringNode(await ret), request, context)
+            } else {
+                return renderServerVNode(escapeStringNode(ret), request, context)
+            }
+        } catch (reason: any) {
+            return renderServerVNode(escapeStringNode(this.component.onFail(reason, this.attrs, this.children, request, context)), request, context)
         }
     }
 }
@@ -651,7 +643,7 @@ export function createElement(tag: any, attrs: Readonly<any>, ...children: Reado
         // Render StaticServerComponent now
         return escapeStringNode((new tag(notNullAttrs, children)).render(notNullAttrs, children))
     } if (tag?.prototype instanceof DynamicServerComponent) {
-        // Create InternalDynamicServerComponent for resolution later
+        // Create DynamicVNodeElement for resolution later
         return new DynamicVNodeElement(new tag(notNullAttrs, children), notNullAttrs, children)
     } else if (typeof tag === 'function') {
         // Render Function component now

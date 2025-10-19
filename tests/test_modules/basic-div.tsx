@@ -3,10 +3,10 @@ import { Context } from "@velotype/veloserver"
 import {DynamicServerComponent, ChildrenAttr, StaticServerComponent} from "jsr:@velotype/velossr"
 import type {EmptyAttrs, ServerVNode} from "jsr:@velotype/velossr"
 
-export type BasicNavAttrsType = {
+type BasicNavAttrsType = {
     modules: [{name: string}]
 }
-export class BasicNav extends StaticServerComponent<BasicNavAttrsType> {
+class BasicNav extends StaticServerComponent<BasicNavAttrsType> {
     override render(attrs: BasicNavAttrsType) {
         return <div>
             <div><a href="/">Home</a></div>
@@ -49,22 +49,17 @@ color: red;
     }
 }
 
-export class RequestUrl2AsyncTest extends DynamicServerComponent<EmptyAttrs> {
-    override render(_attrs: Readonly<EmptyAttrs>, _children: ServerVNode[], _request: Request, _context: Context): ServerVNode {
-        return 'test string &<"'
-    }
-}
-export class RequestUrlAsyncTest extends DynamicServerComponent<EmptyAttrs> {
+class RequestUrlAsyncTest extends DynamicServerComponent<EmptyAttrs> {
     override render(_attrs: Readonly<EmptyAttrs>, _children: ServerVNode[], _request: Request, _context: Context): ServerVNode {
         return <div>
             <div>{"A combo of static & dynamic: "}<RequestUrlTest/></div>
         </div>
     }
 }
-function sleep(milliseconds) {
+function sleep(milliseconds: number) {
     return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
-export class RequestUrlTest extends DynamicServerComponent<EmptyAttrs> {
+class RequestUrlTest extends DynamicServerComponent<EmptyAttrs> {
     override async render(_attrs: Readonly<EmptyAttrs>, _children: ServerVNode[], request: Request, _context: Context): Promise<ServerVNode> {
         await sleep(1000)
         return request.url + 'sleep&<"!'
@@ -89,6 +84,46 @@ export class BasicDynamicTest extends StaticServerComponent<EmptyAttrs> {
             <RequestUrlTest/>
             <hr/>
             <div id="hello-dynamic-div">Hello Velotype dynamic streaming!</div>
+        </div>
+    }
+}
+
+export class BasicThrowSyncComponent extends DynamicServerComponent<EmptyAttrs> {
+    override async render(_attrs: Readonly<EmptyAttrs>, _children: ServerVNode[], _request: Request, context: Context): Promise<ServerVNode> {
+        if (context.url.searchParams.has("throw")) {
+            throw new Error("errored for some reason")
+        }
+        await sleep(500)
+        return <div id="throw-content">throw content</div>
+    }
+}
+
+export class BasicThrowASyncComponent extends DynamicServerComponent<EmptyAttrs> {
+    override async render(_attrs: Readonly<EmptyAttrs>, _children: ServerVNode[], _request: Request, context: Context): Promise<ServerVNode> {
+        if (context.url.searchParams.has("throw")) {
+            throw new Error("errored for some reason")
+        }
+        await sleep(500)
+        return <div id="throw-content">throw content</div>
+    }
+}
+
+export class BasicThrowSyncTest extends DynamicServerComponent<EmptyAttrs> {
+    override render(_attrs: Readonly<EmptyAttrs>, _children: ServerVNode[], _request: Request, _context: Context): ServerVNode {
+        return <div>
+            <div id="before-content">before content</div>
+            <div id="outer-throw-content"><BasicThrowSyncComponent/></div>
+            <div id="after-content">after content</div>
+        </div>
+    }
+}
+
+export class BasicThrowASyncTest extends DynamicServerComponent<EmptyAttrs> {
+    override render(_attrs: Readonly<EmptyAttrs>, _children: ServerVNode[], _request: Request, _context: Context): ServerVNode {
+        return <div>
+            <div id="before-content">before content</div>
+            <div id="outer-throw-content"><BasicThrowASyncComponent/></div>
+            <div id="after-content">after content</div>
         </div>
     }
 }
