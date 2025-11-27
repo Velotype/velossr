@@ -36,7 +36,6 @@ import {
     prepareVNodeForRendering,
     prepareHTMLVNodeForRendering,
     renderServerVNode,
-    SafeText,
     RenderedVDOM,
 } from "../tsx/ssr-core.ts"
 
@@ -76,7 +75,6 @@ export {
     prepareVNodeForRendering,
     prepareHTMLVNodeForRendering,
     renderServerVNode,
-    SafeText,
     RenderedVDOM,
 }
 
