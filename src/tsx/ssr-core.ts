@@ -52,6 +52,27 @@ function escapeHtmlText(str: string): string {
     })
 }
 
+/** Set of special characters that need escaping in HTML text */
+const encodedCssEntities = /[>&<]/
+
+/** Regex of special characters that need escaping in HTML text */
+const encodedCssRegex = /[>&<]/g
+
+/** Replace special HTML characters with HTML entities */
+function escapeCssText(str: string): string {
+	if (str.length === 0 || encodedCssEntities.test(str) === false) {
+        return str
+    }
+    return str.replace(encodedCssRegex, function(match: string): string {
+		if (match === '>') {
+			return '&gt;'
+        } else if (match === '&') {
+			return '&amp;'
+        }
+		return '&lt;'
+    })
+}
+
 /** Replace special characters needed in quoted HTML Attribute values with HTML entities */
 function escapeHtmlAttrValueText(str: string): string {
 	if (str.length === 0 || str.includes('"') === false) {
@@ -113,7 +134,7 @@ export type PreparedServerVNodeElement = DynamicVNodeElement | Uint8Array
 export type PreparedServerVNode = PreparedServerVNodeElement[]
 
 /** An individual element as part of a ServerVNode */
-export type ServerVNodeElement = HTMLElement | DynamicVNodeElement | BasicTypes | null
+export type ServerVNodeElement = HTMLElement | SafeText | DynamicVNodeElement | BasicTypes | null
 
 /** Virtual Node for use in SSR */
 export type ServerVNode = ServerVNodeElement | ServerVNode[]
@@ -148,6 +169,8 @@ export function prepareVNodeForRendering(node: ServerVNode): PreparedServerVNode
             nextString += node
         } else if (typeof node === 'boolean') {
             nextString += node
+        } else if (node instanceof SafeText) {
+            nextString += node.text
         } else if (node instanceof DynamicVNodeElement || node instanceof Uint8Array) {
             if (nextString != "") {
                 output.push(encoder.encode(nextString))
@@ -191,6 +214,8 @@ export function renderServerVNode(node: ServerVNode | PreparedServerVNode, reque
         } else if (node instanceof HTMLElement) {
             flatNodes.splice(index, 1, ...node.prepareElement())
             index--
+        } else if (node instanceof SafeText) {
+            output.push(encoder.encode(node.text))
         } else if (node instanceof AsyncRenderedVNodeElement || node instanceof Uint8Array) {
             output.push(node)
         } else if (node !== null) {
@@ -249,7 +274,8 @@ export class DynamicVNodeElement {
  * 
  * ```
  * const x = [ [1, 2] , [[3]] , 4]
- * const y = flattenArray(x)
+ * const y = []
+ * flattenArray(y, x)
  * ```
  * then `y` will equal `[1,2,3,4]`
  */
@@ -321,13 +347,17 @@ export class RenderedVDOM {
         while(cont) {
             const node = flatNodes[index]
             if (node instanceof AsyncRenderedVNodeElement) {
-                const res = (await node.promise).node
-                if (res instanceof Array) {
-                    const flatRes: RenderedVNodeElement[] = []
-                    flattenArray(flatRes, res)
-                    flatNodes.splice(index, 1, ...flatRes)
-                } else {
-                    flatNodes[index] = res
+                try {
+                    const res = (await node.promise).node
+                    if (res instanceof Array) {
+                        const flatRes: RenderedVNodeElement[] = []
+                        flattenArray(flatRes, res)
+                        flatNodes.splice(index, 1, ...flatRes)
+                    } else {
+                        flatNodes[index] = res
+                    }
+                } catch (error: any) {
+                    console.error("Error during rendering, skipping node", node, error)
                 }
                 index--
             } else {
@@ -406,36 +436,10 @@ export class RenderedVDOM {
 }
 
 /**
- * A VelotypeSSR Function Component that can be used in .tsx files to render HTML Components.
- * 
- * This is equivalent with a StaticServerComponent<AttrsType>
+ * A VelotypeSSR Component that can be used in .tsx files to render HTML Components.
  */
-export type StaticServerFunctionComponent<AttrsType> = (attrs: Readonly<AttrsType>, children: ServerVNode[]) => ServerVNode[] | null | undefined
-/**
- * A Static Component that is able to render without reference to the
- * specific `request` and `context` of a server call
- * 
- * This is equivalent with a StaticServerFunctionComponent<AttrsType>
- */
-export abstract class StaticServerComponent<AttrsType> {
-    /** The attrs for this Component */
-    attrs: Readonly<AttrsType>
-    /** The children for this Component */
-    children: Readonly<ServerVNode[]>
-    /**
-     * Create a new StaticServerComponent
-     * 
-     * Should not need to be called directly
-     */
-    constructor(attrs: AttrsType, children: Readonly<ServerVNode[]>) {
-        this.attrs = attrs
-        this.children = children
-    }
-    /**
-     * Render this Component given a set of attrs and children
-     */
-    abstract render(attrs: Readonly<AttrsType>, children: ServerVNode[]): ServerVNode
-}
+export type StaticServerComponent<AttrsType> = (attrs: Readonly<AttrsType>, children: ServerVNode[]) => ServerVNode | null | undefined
+
 /**
  * A Dynamic Component that needs the specific `request` and `context` in order
  * to render a `Response` to the client
@@ -603,10 +607,44 @@ export class HTMLElement {
         }
         if (voidTags.has(this.tag)) {
             return [encoder.encode(`<${this.tag}${Array.from(attributes.entries()).map(attributeKeyConstructor).join("")}>`)]
+        } else if (this.tag == "style") {
+            const escapedChildren: PreparedServerVNode = []
+            escapeChildren(escapedChildren, this.children, false)
+            const output: PreparedServerVNode = [encoder.encode(`<${this.tag}${Array.from(attributes.entries()).map(attributeKeyConstructor).join("")}>`)]
+            for (const child of escapedChildren) {
+                output.push(child)
+            }
+            output.push(encoder.encode(`</${this.tag}>`))
+            return output
         } else {
             const escapedChildren: PreparedServerVNode = []
             escapeChildren(escapedChildren, this.children)
-            return [encoder.encode(`<${this.tag}${Array.from(attributes.entries()).map(attributeKeyConstructor).join("")}>`), ...escapedChildren, encoder.encode(`</${this.tag}>`)]
+            const output: PreparedServerVNode = [encoder.encode(`<${this.tag}${Array.from(attributes.entries()).map(attributeKeyConstructor).join("")}>`)]
+            for (const child of escapedChildren) {
+                output.push(child)
+            }
+            output.push(encoder.encode(`</${this.tag}>`))
+            return output
+        }
+    }
+}
+
+/**
+ * Represent a raw string literal that is not escaped
+ * 
+ * Use with caution, only when input text is known to be safe
+ * 
+ * WARNING - this will be removed and replaced
+ * 
+ * TODO: Remove this and replace with specific classifications for cases like `<script>` content etc..
+ */
+export class SafeText {
+    text: string
+    constructor(text: string | {text: string}) {
+        if (typeof text == "string") {
+            this.text = text
+        } else {
+            this.text = text.text
         }
     }
 }
@@ -614,17 +652,19 @@ export class HTMLElement {
 /**
  * Process a set of VNodes and string escape any `string` node to be safe HTML Text
  */
-function escapeChildren(escapedChildren: PreparedServerVNode, children: Readonly<ServerVNode[]>) {
+function escapeChildren(escapedChildren: PreparedServerVNode, children: Readonly<ServerVNode[]>, useHtmlEscape: boolean = true) {
     for (const child of children) {
         if (child instanceof Array) {
             escapeChildren(escapedChildren, child)
+        } else if (child instanceof SafeText) {
+            escapedChildren.push(encoder.encode(child.text))
         } else if (child instanceof HTMLElement) {
             escapedChildren.push(...child.prepareElement())
         } else if (typeof child === "string") {
-            escapedChildren.push(encoder.encode(escapeHtmlText(child)))
+            escapedChildren.push(encoder.encode(useHtmlEscape?escapeHtmlText(child):escapeCssText(child)))
         } else if (child instanceof DynamicVNodeElement) {
             escapedChildren.push(child)
-        } else if (child !== null) {
+        } else if (child !== null && child !== undefined) {
             escapedChildren.push(encoder.encode(String(child)))
         }
     }
@@ -639,10 +679,9 @@ function escapeChildren(escapedChildren: PreparedServerVNode, children: Readonly
  */
 export function createElement(tag: any, attrs: Readonly<any>, ...children: Readonly<ServerVNode[]>): ServerVNode {
     const notNullAttrs = attrs || {}
-    if (tag?.prototype instanceof StaticServerComponent) {
-        // Render StaticServerComponent now
-        return escapeStringNode((new tag(notNullAttrs, children)).render(notNullAttrs, children))
-    } if (tag?.prototype instanceof DynamicServerComponent) {
+    if (tag?.prototype instanceof SafeText) {
+        return new SafeText(attrs.text)
+    } else if (tag?.prototype instanceof DynamicServerComponent) {
         // Create DynamicVNodeElement for resolution later
         return new DynamicVNodeElement(new tag(notNullAttrs, children), notNullAttrs, children)
     } else if (typeof tag === 'function') {
@@ -653,7 +692,7 @@ export function createElement(tag: any, attrs: Readonly<any>, ...children: Reado
         return new HTMLElement(tag, attrs, children)
     }
     console.error('Invalid tag', tag, notNullAttrs, children)
-    return []
+    return null
 }
 
 /**

@@ -15,14 +15,13 @@ import {
     type PreparedServerVNode,
 
     // Core types
-    type StaticServerFunctionComponent,
     type EmptyAttrs,
     type IdAttr,
     type ChildrenAttr,
     type StylePassthroughAttrs,
 
     // Server side Component types
-    StaticServerComponent,
+    type StaticServerComponent,
     DynamicServerComponent,
 
     // Specialized
@@ -37,8 +36,8 @@ import {
     prepareVNodeForRendering,
     prepareHTMLVNodeForRendering,
     renderServerVNode,
+    SafeText,
     RenderedVDOM,
-
 } from "../tsx/ssr-core.ts"
 
 export {
@@ -56,14 +55,13 @@ export {
     type PreparedServerVNode,
 
     // Core types
-    type StaticServerFunctionComponent,
     type EmptyAttrs,
     type IdAttr,
     type ChildrenAttr,
     type StylePassthroughAttrs,
 
     // Server side Component types
-    StaticServerComponent,
+    type StaticServerComponent,
     DynamicServerComponent,
 
     // Specialized
@@ -78,8 +76,8 @@ export {
     prepareVNodeForRendering,
     prepareHTMLVNodeForRendering,
     renderServerVNode,
+    SafeText,
     RenderedVDOM,
-
 }
 
 

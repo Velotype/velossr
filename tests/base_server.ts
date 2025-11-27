@@ -1,6 +1,6 @@
-import { App, Context, Inspector, RequestInspectorResponse, Router } from "jsr:@velotype/veloserver"
+import { App, Context, Inspector, RequestInspectorResponse, Router } from "@velotype/veloserver"
 import { BasicStaticTest, BasicDynamicTest, BasicPage, BasicThrowSyncTest, BasicThrowASyncTest } from "./test_modules/basic-div.tsx"
-import { createElement, prepareHTMLVNodeForRendering, renderServerVNode } from "jsr:@velotype/velossr/jsx-runtime"
+import { createElement, prepareHTMLVNodeForRendering, renderServerVNode } from "@velotype/velossr/jsx-runtime"
 
 export function startAppServer(server_port: number): Promise<App> {
     const router: Router = new Router()
