@@ -36,6 +36,12 @@ display:grid;
 grid-template-areas:"navbar" "pagecontent" "footer";
 }
 `}</style>
+        <script id="script-tag">{`
+function testFunc() {
+    const someVar = "someVal";
+    return 3;
+}
+`}</script>
         <div id="hello-div">Hello Velotype!</div>
         <div id="empty-div"></div>
         <hr/>
@@ -74,6 +80,12 @@ display:grid;
 grid-template-areas:"navbar" "pagecontent" "footer";
 }
 `}</style>
+        <script id="script-tag">{`
+function testFunc() {
+    const someVar = "someVal";
+    return 3;
+}
+`}</script>
         <hr/>
         <RequestUrlAsyncTest/>
         <hr/>

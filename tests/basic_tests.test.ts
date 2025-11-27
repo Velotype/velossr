@@ -107,6 +107,7 @@ describe('basic component rendering', () => {
             {selector: "#hello-div", html: "Hello Velotype!"},
             {selector: "#empty-div", html: ""},
             {selector: "#style-tag", includesHtml: 'areas:"navbar" "pagecontent" "footer";'},
+            {selector: "#script-tag", includesHtml: 'const someVar = "someVal";'},
             {selector: "#style-object", attributes: [{name: "style", value: "display:flex;margin-top:4px"}]},
         ]
         await testVariations(setOfVariations)
@@ -117,6 +118,7 @@ describe('basic component rendering', () => {
             {selector: "#hello-div", html: "Hello Velotype!"},
             {selector: "#empty-div", html: ""},
             {selector: "#style-tag", includesHtml: 'areas:"navbar" "pagecontent" "footer";'},
+            {selector: "#script-tag", includesHtml: 'const someVar = "someVal";'},
             {selector: "#hello-dynamic-div", html: "Hello Velotype dynamic streaming!"},
         ]
         await testVariations(setOfVariations)

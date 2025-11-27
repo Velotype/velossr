@@ -52,18 +52,18 @@ function escapeHtmlText(str: string): string {
     })
 }
 
-/** Set of special characters that need escaping in HTML text */
-const encodedCssEntities = /[>&<]/
+/** Set of special characters that need escaping in HTML text (specific to `<style>` and `<script>` tags) */
+const encodedStyleScriptEntities = /[>&<]/
 
-/** Regex of special characters that need escaping in HTML text */
-const encodedCssRegex = /[>&<]/g
+/** Regex of special characters that need escaping in HTML text (specific to `<style>` and `<script>` tags) */
+const encodedStyleScriptRegex = /[>&<]/g
 
 /** Replace special HTML characters with HTML entities */
-function escapeCssText(str: string): string {
-	if (str.length === 0 || encodedCssEntities.test(str) === false) {
+function escapeStyleScriptText(str: string): string {
+	if (str.length === 0 || encodedStyleScriptEntities.test(str) === false) {
         return str
     }
-    return str.replace(encodedCssRegex, function(match: string): string {
+    return str.replace(encodedStyleScriptRegex, function(match: string): string {
 		if (match === '>') {
 			return '&gt;'
         } else if (match === '&') {
@@ -603,7 +603,7 @@ export class HTMLElement {
         }
         if (voidTags.has(this.tag)) {
             return [encoder.encode(`<${this.tag}${Array.from(attributes.entries()).map(attributeKeyConstructor).join("")}>`)]
-        } else if (this.tag == "style") {
+        } else if (this.tag == "style" || this.tag == "script") {
             const escapedChildren: PreparedServerVNode = []
             escapeChildren(escapedChildren, this.children, false)
             const output: PreparedServerVNode = [encoder.encode(`<${this.tag}${Array.from(attributes.entries()).map(attributeKeyConstructor).join("")}>`)]
@@ -635,7 +635,7 @@ function escapeChildren(escapedChildren: PreparedServerVNode, children: Readonly
         } else if (child instanceof HTMLElement) {
             escapedChildren.push(...child.prepareElement())
         } else if (typeof child === "string") {
-            escapedChildren.push(encoder.encode(useHtmlEscape?escapeHtmlText(child):escapeCssText(child)))
+            escapedChildren.push(encoder.encode(useHtmlEscape?escapeHtmlText(child):escapeStyleScriptText(child)))
         } else if (child instanceof DynamicVNodeElement) {
             escapedChildren.push(child)
         } else if (child !== null && child !== undefined) {
