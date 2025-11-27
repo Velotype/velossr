@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 
-import type {ChildrenAttr, DynamicServerComponent, StaticServerFunctionComponent, ServerVNode, StaticServerComponent} from "../tsx/ssr-core.ts"
+import type {ChildrenAttr, DynamicServerComponent, ServerVNode, StaticServerComponent} from "../tsx/ssr-core.ts"
 
 import type {AnchorHTMLAttributes, HTMLAttributes, AreaHTMLAttributes, ArticleHTMLAttributes, AsideHTMLAttributes, AudioHTMLAttributes, BaseHTMLAttributes, BlockquoteHTMLAttributes, BrHTMLAttributes, ButtonHTMLAttributes, CanvasHTMLAttributes, CaptionHTMLAttributes, ColHTMLAttributes, ColgroupHTMLAttributes, DataHTMLAttributes, DataListHTMLAttributes, DdHTMLAttributes, DelHTMLAttributes, DetailsHTMLAttributes, DialogHTMLAttributes, DlHTMLAttributes, DtHTMLAttributes, EmbedHTMLAttributes, FieldsetHTMLAttributes, FigcaptionHTMLAttributes, FooterHTMLAttributes, FormHTMLAttributes, HeadingHTMLAttributes, HeadHTMLAttributes, HeaderHTMLAttributes, HrHTMLAttributes, HtmlHTMLAttributes, IframeHTMLAttributes, ImgHTMLAttributes, InputHTMLAttributes, InsHTMLAttributes, LabelHTMLAttributes, LegendHTMLAttributes, LiHTMLAttributes, LinkHTMLAttributes, MainHTMLAttributes, MapHTMLAttributes, MenuHTMLAttributes, MetaHTMLAttributes, MeterHTMLAttributes, NavHTMLAttributes, NoScriptHTMLAttributes, ObjectHTMLAttributes, OlHTMLAttributes, OptgroupHTMLAttributes, OptionHTMLAttributes, OutputHTMLAttributes, PictureHTMLAttributes, ProgressHTMLAttributes, QuoteHTMLAttributes, ScriptHTMLAttributes, SearchHTMLAttributes, SelectHTMLAttributes, SlotHTMLAttributes, SourceHTMLAttributes, StyleHTMLAttributes, TableHTMLAttributes, TdHTMLAttributes, TemplateHTMLAttributes, TextareaHTMLAttributes, ThHTMLAttributes, TimeHTMLAttributes, TitleHTMLAttributes, TrackHTMLAttributes, UlHTMLAttributes, VideoHTMLAttributes, WbrHTMLAttributes } from "./dom-types.d.ts"
 
@@ -11,8 +11,8 @@ import type {AnchorHTMLAttributes, HTMLAttributes, AreaHTMLAttributes, ArticleHT
 export namespace JSXInternal {
 
     /** Types that are allowed as a `<tag/>` */
-    export type ElementType<C extends StaticServerComponent<any> | DynamicServerComponent<any>> = keyof IntrinsicElements
-        | StaticServerFunctionComponent<any>
+    export type ElementType<C extends DynamicServerComponent<any>> = keyof IntrinsicElements
+        | StaticServerComponent<any>
         | C
 
     /**

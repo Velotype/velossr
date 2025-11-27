@@ -1,52 +1,49 @@
 // deno-lint-ignore-file jsx-no-useless-fragment jsx-curly-braces
 import { Context } from "@velotype/veloserver"
-import {DynamicServerComponent, ChildrenAttr, StaticServerComponent} from "jsr:@velotype/velossr"
-import type {EmptyAttrs, ServerVNode} from "jsr:@velotype/velossr"
+import {DynamicServerComponent, ChildrenAttr, StaticServerComponent} from "@velotype/velossr"
+import type {EmptyAttrs, ServerVNode} from "@velotype/velossr"
 
 type BasicNavAttrsType = {
     modules: [{name: string}]
 }
-class BasicNav extends StaticServerComponent<BasicNavAttrsType> {
-    override render(attrs: BasicNavAttrsType) {
-        return <div>
-            <div><a href="/">Home</a></div>
-            {attrs.modules.map(module=> <>
-                <div><a href={`/sync/${module.name}`}>sync {module.name}</a></div>
-                <div><a href={`/stream/${module.name}`}>stream {module.name}</a></div>
-            </>)}
-        </div>
-    }
+const BasicNav: StaticServerComponent<BasicNavAttrsType> = function(attrs: Readonly<BasicNavAttrsType>): ServerVNode {
+    return <div>
+        <div><a href="/">Home</a></div>
+        {attrs.modules.map(module=> <>
+            <div><a href={`/sync/${module.name}`}>sync {module.name}</a></div>
+            <div><a href={`/stream/${module.name}`}>stream {module.name}</a></div>
+        </>)}
+    </div>
 }
 export type BasicPageAttrsType = {
     modules: [{name: string}]
 }
-export class BasicPage extends StaticServerComponent<BasicNavAttrsType & ChildrenAttr> {
-    override render(attrs: BasicNavAttrsType, children: ServerVNode) {
-        return <html>
-            <body>
-                <BasicNav modules={attrs.modules} />
-                {children}
-            </body>
-        </html>
-    }
+export const BasicPage: StaticServerComponent<BasicPageAttrsType & ChildrenAttr> = function(attrs: Readonly<BasicPageAttrsType>, children: ServerVNode): ServerVNode {
+    return <html>
+        <body>
+            <BasicNav modules={attrs.modules} />
+            {children}
+        </body>
+    </html>
 }
 
-export class BasicStaticTest extends StaticServerComponent<EmptyAttrs> {
-    override render() {
-        return <div>
-                <style>{`
-#hello-div {
-color: red;
+export const BasicStaticTest: StaticServerComponent<EmptyAttrs> = function(): ServerVNode {
+    return <div>
+            <style id="style-tag">{`
+#hello-div{color:red;}
+#other-div{
+display:grid;
+grid-template-areas:"navbar" "pagecontent" "footer";
 }
 `}</style>
-            <div id="hello-div">Hello Velotype!</div>
-            <hr/>
-            <>
-                this is some & text {'"<&'}
-            </>
-            <div id="style-object" style={{display:"flex", marginTop:"4px"}}>style object</div>
-        </div>
-    }
+        <div id="hello-div">Hello Velotype!</div>
+        <div id="empty-div"></div>
+        <hr/>
+        <>
+            this is some & text {'"<&'}
+        </>
+        <div id="style-object" style={{display:"flex", marginTop:"4px"}}>style object</div>
+    </div>
 }
 
 class RequestUrlAsyncTest extends DynamicServerComponent<EmptyAttrs> {
@@ -66,26 +63,32 @@ class RequestUrlTest extends DynamicServerComponent<EmptyAttrs> {
     }
 }
 
-export class BasicDynamicTest extends StaticServerComponent<EmptyAttrs> {
-    override render(_attrs: Readonly<EmptyAttrs>, _children: ServerVNode[]): ServerVNode {
-        return <div>
-            <div id="hello-div">Hello Velotype!</div>
-            <hr/>
-            <RequestUrlAsyncTest/>
-            <hr/>
-            <RequestUrlTest/>
-            <hr/>
-            <RequestUrlTest/>
-            <hr/>
-            <RequestUrlTest/>
-            <hr/>
-            <RequestUrlTest/>
-            <hr/>
-            <RequestUrlTest/>
-            <hr/>
-            <div id="hello-dynamic-div">Hello Velotype dynamic streaming!</div>
-        </div>
-    }
+export const BasicDynamicTest: StaticServerComponent<EmptyAttrs> = function(): ServerVNode {
+    return <div>
+        <div id="hello-div">Hello Velotype!</div>
+        <div id="empty-div"></div>
+            <style id="style-tag">{`
+#hello-div{color:red;}
+#other-div{
+display:grid;
+grid-template-areas:"navbar" "pagecontent" "footer";
+}
+`}</style>
+        <hr/>
+        <RequestUrlAsyncTest/>
+        <hr/>
+        <RequestUrlTest/>
+        <hr/>
+        <RequestUrlTest/>
+        <hr/>
+        <RequestUrlTest/>
+        <hr/>
+        <RequestUrlTest/>
+        <hr/>
+        <RequestUrlTest/>
+        <hr/>
+        <div id="hello-dynamic-div">Hello Velotype dynamic streaming!</div>
+    </div>
 }
 
 export class BasicThrowSyncComponent extends DynamicServerComponent<EmptyAttrs> {

@@ -1,12 +1,12 @@
 /// <reference lib="deno.ns" />
 
-import { afterAll, beforeAll, describe, it } from "jsr:@std/testing/bdd"
-import { fail, assertEquals, assertLess } from "jsr:@std/assert"
+import { afterAll, beforeAll, describe, it } from "@std/testing/bdd"
+import { fail, assertEquals, assertLess } from "@std/assert"
 
-import {App} from "jsr:@velotype/veloserver"
+import {App} from "@velotype/veloserver"
 
-import { launch } from "jsr:@astral/astral"
-import type { Browser, ElementHandle, Page } from "jsr:@astral/astral"
+import { launch } from "@astral/astral"
+import type { Browser, ElementHandle, Page } from "@astral/astral"
 import { startAppServer } from "./base_server.ts"
 
 const server_port = 3000
@@ -70,6 +70,7 @@ describe('basic component rendering', () => {
         selector: string
         text?: string
         html?: string
+        includesHtml?: string
         attributes?: {
             name: string
             value: string
@@ -80,11 +81,15 @@ describe('basic component rendering', () => {
             console.log("testing variant:", variant)
             const selection = await page.waitForSelector(variant.selector)
             if (selection) {
-                if (variant.text) {
+                if (variant.text != undefined) {
                     assertEquals(await selection.innerText(),variant.text)
                 }
-                if (variant.html) {
+                if (variant.html != undefined) {
                     assertEquals(await selection.innerHTML(),variant.html)
+                }
+                if (variant.includesHtml != undefined) {
+                    const doesInclude = (await selection.innerHTML()).includes(variant.includesHtml)
+                    assertEquals(doesInclude, true)
                 }
                 if (variant.attributes) {
                     for (const attribute of variant.attributes) {
@@ -100,6 +105,8 @@ describe('basic component rendering', () => {
     itWrap("set of basic-static tests", "basic-static", "#hello-div", async (_pageLoadSelection: ElementHandle) => {
         const setOfVariations = [
             {selector: "#hello-div", html: "Hello Velotype!"},
+            {selector: "#empty-div", html: ""},
+            {selector: "#style-tag", includesHtml: 'areas:"navbar" "pagecontent" "footer";'},
             {selector: "#style-object", attributes: [{name: "style", value: "display:flex;margin-top:4px"}]},
         ]
         await testVariations(setOfVariations)
@@ -108,6 +115,8 @@ describe('basic component rendering', () => {
     itWrap("set of basic-dynamic tests", "basic-dynamic", "#hello-div", async (_pageLoadSelection: ElementHandle) => {
         const setOfVariations = [
             {selector: "#hello-div", html: "Hello Velotype!"},
+            {selector: "#empty-div", html: ""},
+            {selector: "#style-tag", includesHtml: 'areas:"navbar" "pagecontent" "footer";'},
             {selector: "#hello-dynamic-div", html: "Hello Velotype dynamic streaming!"},
         ]
         await testVariations(setOfVariations)
