@@ -1,6 +1,6 @@
 // deno-lint-ignore-file jsx-no-useless-fragment jsx-curly-braces
 import { Context } from "@velotype/veloserver"
-import {DynamicServerComponent, ChildrenAttr, StaticServerComponent} from "@velotype/velossr"
+import {DynamicServerComponent, ChildrenAttr, StaticServerComponent, SafeText} from "@velotype/velossr"
 import type {EmptyAttrs, ServerVNode} from "@velotype/velossr"
 
 type BasicNavAttrsType = {
@@ -36,6 +36,17 @@ display:grid;
 grid-template-areas:"navbar" "pagecontent" "footer";
 }
 `}</style>
+        <style id="style-tag-safetext">{new SafeText(`
+.mask-box {
+mask-image:url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 100" preserveAspectRatio="none" width="100" height="50"><g transform="scale(1,-1)" transform-origin="50%"><path d="M0 0v100S0 4 500 4s500 96 500 96V0H0Z"></path></g></svg>');
+}
+`)}</style>
+        <script id="script-tag-safetext">{new SafeText(`
+function testFunc() {
+    const someVar = "<someVal>";
+    return 3;
+}
+`)}</script>
         <script id="script-tag">{`
 function testFunc() {
     const someVar = "someVal";
@@ -44,6 +55,7 @@ function testFunc() {
 `}</script>
         <div id="hello-div">Hello Velotype!</div>
         <div id="empty-div"></div>
+        <div class="mask-box">this is a box with a css mask</div>
         <hr/>
         <>
             this is some & text {'"<&'}
@@ -73,19 +85,31 @@ export const BasicDynamicTest: StaticServerComponent<EmptyAttrs> = function(): S
     return <div>
         <div id="hello-div">Hello Velotype!</div>
         <div id="empty-div"></div>
-            <style id="style-tag">{`
+        <style id="style-tag">{`
 #hello-div{color:red;}
 #other-div{
 display:grid;
 grid-template-areas:"navbar" "pagecontent" "footer";
 }
 `}</style>
+        <style id="style-tag-safetext">{new SafeText(`
+.mask-box {
+mask-image:url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 100" preserveAspectRatio="none" width="100" height="50"><g transform="scale(1,-1)" transform-origin="50%"><path d="M0 0v100S0 4 500 4s500 96 500 96V0H0Z"></path></g></svg>');
+}
+`)}</style>
+        <script id="script-tag-safetext">{new SafeText(`
+function testFunc() {
+    const someVar = "<someVal>";
+    return 3;
+}
+`)}</script>
         <script id="script-tag">{`
 function testFunc() {
     const someVar = "someVal";
     return 3;
 }
 `}</script>
+        <div class="mask-box">this is a box with a css mask</div>
         <hr/>
         <RequestUrlAsyncTest/>
         <hr/>

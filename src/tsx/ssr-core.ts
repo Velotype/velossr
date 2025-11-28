@@ -630,22 +630,17 @@ export class HTMLElement {
 }
 
 /**
- * Represent a raw string literal that is not escaped
+ * Represent a raw string literal that is not escaped. The default escaping
+ * will handle the vast majority of cases properly, however HTML / CSS / SVG / JS
+ * escaping is complex and syntax parsing dependent. This class can be used
+ * to manage complex scenarios, however should be used carefully.
  * 
  * Use with caution, only when input text is known to be safe
- * 
- * WARNING - this will be removed and replaced
- * 
- * TODO: Remove this and replace with specific classifications for cases like `<script>` content etc..
  */
 export class SafeText {
     text: string
-    constructor(text: string | {text: string}) {
-        if (typeof text == "string") {
-            this.text = text
-        } else {
-            this.text = text.text
-        }
+    constructor(text: string) {
+        this.text = text
     }
 }
 

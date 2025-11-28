@@ -107,7 +107,9 @@ describe('basic component rendering', () => {
             {selector: "#hello-div", html: "Hello Velotype!"},
             {selector: "#empty-div", html: ""},
             {selector: "#style-tag", includesHtml: 'areas:"navbar" "pagecontent" "footer";'},
+            {selector: "#style-tag-safetext", includesHtml: 'mask-image:url(\'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 100" preserveAspectRatio="none" width="100" height="50"><g transform="scale(1,-1)" tra'},
             {selector: "#script-tag", includesHtml: 'const someVar = "someVal";'},
+            {selector: "#script-tag-safetext", includesHtml: 'const someVar = "<someVal>";'},
             {selector: "#style-object", attributes: [{name: "style", value: "display:flex;margin-top:4px"}]},
         ]
         await testVariations(setOfVariations)
@@ -118,7 +120,9 @@ describe('basic component rendering', () => {
             {selector: "#hello-div", html: "Hello Velotype!"},
             {selector: "#empty-div", html: ""},
             {selector: "#style-tag", includesHtml: 'areas:"navbar" "pagecontent" "footer";'},
+            {selector: "#style-tag-safetext", includesHtml: 'mask-image:url(\'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 100" preserveAspectRatio="none" width="100" height="50"><g transform="scale(1,-1)" tra'},
             {selector: "#script-tag", includesHtml: 'const someVar = "someVal";'},
+            {selector: "#script-tag-safetext", includesHtml: 'const someVar = "<someVal>";'},
             {selector: "#hello-dynamic-div", html: "Hello Velotype dynamic streaming!"},
         ]
         await testVariations(setOfVariations)
