@@ -134,7 +134,7 @@ export type PreparedServerVNodeElement = DynamicVNodeElement | Uint8Array
 export type PreparedServerVNode = PreparedServerVNodeElement[]
 
 /** An individual element as part of a ServerVNode */
-export type ServerVNodeElement = HTMLElement | DynamicVNodeElement | BasicTypes | null
+export type ServerVNodeElement = HTMLElement | SafeText | DynamicVNodeElement | BasicTypes | null
 
 /** Virtual Node for use in SSR */
 export type ServerVNode = ServerVNodeElement | ServerVNode[]
@@ -169,6 +169,8 @@ export function prepareVNodeForRendering(node: ServerVNode): PreparedServerVNode
             nextString += node
         } else if (typeof node === 'boolean') {
             nextString += node
+        } else if (node instanceof SafeText) {
+            nextString += node.text
         } else if (node instanceof DynamicVNodeElement || node instanceof Uint8Array) {
             if (nextString != "") {
                 output.push(encoder.encode(nextString))
@@ -212,6 +214,8 @@ export function renderServerVNode(node: ServerVNode | PreparedServerVNode, reque
         } else if (node instanceof HTMLElement) {
             flatNodes.splice(index, 1, ...node.prepareElement())
             index--
+        } else if (node instanceof SafeText) {
+            output.push(encoder.encode(node.text))
         } else if (node instanceof AsyncRenderedVNodeElement || node instanceof Uint8Array) {
             output.push(node)
         } else if (node !== null) {
@@ -626,12 +630,34 @@ export class HTMLElement {
 }
 
 /**
+ * Represent a raw string literal that is not escaped
+ * 
+ * Use with caution, only when input text is known to be safe
+ * 
+ * WARNING - this will be removed and replaced
+ * 
+ * TODO: Remove this and replace with specific classifications for cases like `<script>` content etc..
+ */
+export class SafeText {
+    text: string
+    constructor(text: string | {text: string}) {
+        if (typeof text == "string") {
+            this.text = text
+        } else {
+            this.text = text.text
+        }
+    }
+}
+
+/**
  * Process a set of VNodes and string escape any `string` node to be safe HTML Text
  */
 function escapeChildren(escapedChildren: PreparedServerVNode, children: Readonly<ServerVNode[]>, useHtmlEscape: boolean = true) {
     for (const child of children) {
         if (child instanceof Array) {
             escapeChildren(escapedChildren, child)
+        } else if (child instanceof SafeText) {
+            escapedChildren.push(encoder.encode(child.text))
         } else if (child instanceof HTMLElement) {
             escapedChildren.push(...child.prepareElement())
         } else if (typeof child === "string") {
@@ -653,7 +679,9 @@ function escapeChildren(escapedChildren: PreparedServerVNode, children: Readonly
  */
 export function createElement(tag: any, attrs: Readonly<any>, ...children: Readonly<ServerVNode[]>): ServerVNode {
     const notNullAttrs = attrs || {}
-    if (tag?.prototype instanceof DynamicServerComponent) {
+    if (tag?.prototype instanceof SafeText) {
+        return new SafeText(attrs.text)
+    } else if (tag?.prototype instanceof DynamicServerComponent) {
         // Create DynamicVNodeElement for resolution later
         return new DynamicVNodeElement(new tag(notNullAttrs, children), notNullAttrs, children)
     } else if (typeof tag === 'function') {
