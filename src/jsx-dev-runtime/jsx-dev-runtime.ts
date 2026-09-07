@@ -25,7 +25,7 @@ import {
     DynamicServerComponent,
 
     // Specialized
-    type AsyncRenderObject,
+    AsyncRenderObject,
     DynamicVNodeElement,
 
     // TSX integration
@@ -65,7 +65,7 @@ export {
     DynamicServerComponent,
 
     // Specialized
-    type AsyncRenderObject,
+    AsyncRenderObject,
     DynamicVNodeElement,
 
     // TSX integration
