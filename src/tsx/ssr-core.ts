@@ -128,13 +128,13 @@ export type RenderedVNodeElement = Uint8Array | AsyncRenderedVNodeElement
 export type RenderedVNode = RenderedVNodeElement | RenderedVNode[]
 
 /** A ServerVNode that has been compacted and prepared for rendering */
-export type PreparedServerVNodeElement = DynamicVNodeElement | Uint8Array
+export type PreparedServerVNodeElement = DynamicVNodeElement | AsyncRenderedVNodeElement | Uint8Array
 
 /** A ServerVNode that has been compacted and prepared for rendering */
 export type PreparedServerVNode = PreparedServerVNodeElement[]
 
 /** An individual element as part of a ServerVNode */
-export type ServerVNodeElement = HTMLElement | SafeText | DynamicVNodeElement | BasicTypes | null
+export type ServerVNodeElement = HTMLElement | SafeText | DynamicVNodeElement | AsyncRenderedVNodeElement | BasicTypes | null
 
 /** Virtual Node for use in SSR */
 export type ServerVNode = ServerVNodeElement | ServerVNode[]
@@ -504,23 +504,22 @@ export class AsyncRenderObject<DataType> {
         }
     }
     /**
-     * Render this AsyncRenderObject into a VNode with the fiven `renderFunction()`
+     * Render this AsyncRenderObject into a VNode with the given `renderFunction()`
      * when the AsyncRenderObject's Promise resolves
      */
     render(renderFunction: (data: DataType) => Promise<ServerVNode>, onFail?: (reason: Readonly<any>, request: Request, context: any) => ServerVNode): AsyncRenderedVNodeElement {
-        return new AsyncRenderedVNodeElement(new Promise(resolve => {
-            this.promise.then(async data => {
-                try {
-                    resolve(renderServerVNode(escapeStringNode(await renderFunction(data)), this.request, this.context))
-                } catch (reason: any) {
-                    if (onFail) {
-                        resolve(renderServerVNode(escapeStringNode(onFail(reason, this.request, this.context)), this.request, this.context))
-                    } else {
-                        resolve(renderServerVNode(escapeStringNode(this.defaultOnFail(reason, this.request, this.context)), this.request, this.context))
-                    }
+        return new AsyncRenderedVNodeElement((async () => {
+            try {
+                const data = await this.promise
+                return renderServerVNode(escapeStringNode(await renderFunction(data)), this.request, this.context)
+            } catch (reason: any) {
+                if (onFail) {
+                    return renderServerVNode(escapeStringNode(onFail(reason, this.request, this.context)), this.request, this.context)
+                } else {
+                    return renderServerVNode(escapeStringNode(this.defaultOnFail(reason, this.request, this.context)), this.request, this.context)
                 }
-            })
-        }))
+            }
+        })())
     }
 }
 
@@ -658,6 +657,8 @@ function escapeChildren(escapedChildren: PreparedServerVNode, children: Readonly
         } else if (typeof child === "string") {
             escapedChildren.push(encoder.encode(useHtmlEscape?escapeHtmlText(child):escapeStyleScriptText(child)))
         } else if (child instanceof DynamicVNodeElement) {
+            escapedChildren.push(child)
+        } else if (child instanceof AsyncRenderedVNodeElement) {
             escapedChildren.push(child)
         } else if (child !== null && child !== undefined) {
             escapedChildren.push(encoder.encode(String(child)))

@@ -29,7 +29,7 @@ describe('basic component rendering', () => {
     afterAll(async () => {
         await page?.close()
         await browser?.close()
-        await server?.close('End basic tests')
+        server?.close('End basic tests')
     })
 
     const itWrap = (name: string, module: string, selector: string, testFn: (selection: ElementHandle) => void | Promise<void>) => {
