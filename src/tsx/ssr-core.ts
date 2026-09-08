@@ -134,7 +134,7 @@ export type PreparedServerVNodeElement = DynamicVNodeElement | AsyncRenderedVNod
 export type PreparedServerVNode = PreparedServerVNodeElement[]
 
 /** An individual element as part of a ServerVNode */
-export type ServerVNodeElement = HTMLElement | SafeText | DynamicVNodeElement | AsyncRenderedVNodeElement | BasicTypes | null
+export type ServerVNodeElement = HTMLElement | SafeText | DynamicVNodeElement | AsyncRenderedVNodeElement | BasicTypes | null | undefined
 
 /** Virtual Node for use in SSR */
 export type ServerVNode = ServerVNodeElement | ServerVNode[]
