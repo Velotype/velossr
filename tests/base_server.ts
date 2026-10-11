@@ -1,4 +1,4 @@
-import { App, Context, Inspector, RequestInspectorResponse, Router } from "@velotype/veloserver"
+import { App, type Context, Inspector, RequestInspectorResponse, Router } from "@velotype/veloserver"
 import { BasicStaticTest, BasicDynamicTest, BasicPage, BasicThrowSyncTest, BasicThrowASyncTest } from "./test_modules/basic-div.tsx"
 import { createElement, prepareHTMLVNodeForRendering, renderServerVNode } from "@velotype/velossr/jsx-runtime"
 

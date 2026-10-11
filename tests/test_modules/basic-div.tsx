@@ -1,6 +1,6 @@
 // deno-lint-ignore-file jsx-no-useless-fragment jsx-curly-braces
-import { Context } from "@velotype/veloserver"
-import {DynamicServerComponent, ChildrenAttr, StaticServerComponent, SafeText} from "@velotype/velossr"
+import type { Context } from "@velotype/veloserver"
+import {DynamicServerComponent, type ChildrenAttr, type StaticServerComponent, SafeText} from "@velotype/velossr"
 import type {EmptyAttrs, ServerVNode} from "@velotype/velossr"
 
 type BasicNavAttrsType = {

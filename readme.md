@@ -36,22 +36,32 @@ const divTag: ServerVNode = <div style={{display: "inline", marginTop: "4px"}}>t
 
 ### Escapes text and attributes by default
 
-Text nodes, attribute values, and attribute names are all escaped automatically.
+Text, attribute values, and attribute names are escaped automatically, including the text that Components return (as a string, an Array, or a fragment). Text is escaped once, where it is written.
 
 ### Supports inline `<style>` and `<script>` tags
 
-Write CSS and JS as plain template strings - content is still escaped, using rules appropriate for `<style>`/`<script>` contents rather than HTML text.
+Write CSS and JS as plain template strings. Browsers do not decode character references (such as `&lt;`) inside `<style>` and `<script>`, so their text is written as is, with `<`, `>`, and `&` unchanged. Only the sequences that would end the element early are changed, in a way that reads the same in JavaScript and CSS strings: in a `<script>`, the `<` of `</script` and `<!--` is written as `\u003c`, and in a `<style>`, `</style` is written as `<\/style`.
 
 ```tsx
 <style>{`
-#hello-div { color: red; }
+div > p { color: red; }
 `}</style>
 <script>{`
 function greet(name) {
-    console.log("Hello " + name);
+    if (name.length > 0 && name !== "</script>") {
+        console.log("Hello " + name);
+    }
 }
 `}</script>
 ```
+
+This also makes JSON safe to embed, whatever its strings contain:
+
+```tsx
+<script type="application/json" id="page-data">{JSON.stringify(data)}</script>
+```
+
+A `DynamicServerComponent` inside a `<script>` or `<style>` has its text escaped the same way, so it can write per-request data. Elements, and the output of an `AsyncRenderObject` (which is escaped as HTML), cannot be placed inside a `<script>` or `<style>`: they are skipped, and an error is logged.
 
 For the rare case where you need to emit raw, already-safe content that shouldn't be escaped at all, wrap it in `SafeText`.
 
@@ -108,21 +118,23 @@ const response = new Response(renderServerVNode(preparedPage, request, context).
 Velossr pairs naturally with [veloserver](https://jsr.io/@velotype/veloserver):
 
 ```tsx
-import { App, Router, Context } from "jsr:@velotype/veloserver"
-import { prepareHTMLVNodeForRendering, renderServerVNode } from "jsr:@velotype/velossr"
+import { type Context, Router, Server } from "jsr:@velotype/veloserver"
+import { type EmptyAttrs, prepareHTMLVNodeForRendering, renderServerVNode, type StaticServerComponent } from "jsr:@velotype/velossr"
 
 const Page: StaticServerComponent<EmptyAttrs> = function() {
     return <html><body><div>Hello velossr!</div></body></html>
 }
 const preparedPage = prepareHTMLVNodeForRendering(<Page/>)
 
-const router = new Router()
-router.get("/", function(request: Request, context: Context) {
+const router = new Router<never>({})
+router.get("/", function(request: Request, context: Context<never>) {
     const response = new Response(renderServerVNode(preparedPage, request, context).toReadableStream())
     response.headers.set("content-type", "text/html; charset=utf-8")
     return response
 })
 
-const app = new App(router)
-app.serve("127.0.0.1", 3000)
+const server = new Server(router)
+server.serve("127.0.0.1", 3000)
 ```
+
+Run it with `deno run --allow-net --allow-sys server.tsx`.

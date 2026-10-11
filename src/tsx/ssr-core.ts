@@ -52,33 +52,59 @@ function escapeHtmlText(str: string): string {
     })
 }
 
-/** Set of special characters that need escaping in HTML text (specific to `<style>` and `<script>` tags) */
-const encodedStyleScriptEntities = /[>&<]/
+/** Sequences that end a `<script>` early (`</script`), or change how the rest of it is parsed (`<!--`) */
+const scriptEndRegex = /<(\/script|!--)/gi
 
-/** Regex of special characters that need escaping in HTML text (specific to `<style>` and `<script>` tags) */
-const encodedStyleScriptRegex = /[>&<]/g
-
-/** Replace special HTML characters with HTML entities */
-function escapeStyleScriptText(str: string): string {
-	if (str.length === 0 || encodedStyleScriptEntities.test(str) === false) {
-        return str
-    }
-    return str.replace(encodedStyleScriptRegex, function(match: string): string {
-		if (match === '>') {
-			return '&gt;'
-        } else if (match === '&') {
-			return '&amp;'
-        }
-		return '&lt;'
-    })
+/**
+ * Make text safe as the contents of a `<script>`
+ * 
+ * Browsers do not decode character references in a `<script>`, so its text is written as is, except
+ * that the `<` of each `</script` and `<!--` is written as `<`, which reads the same inside the
+ * JavaScript strings, template literals, regular expressions, and JSON where those sequences can occur
+ */
+function escapeScriptText(str: string): string {
+    return str.replace(scriptEndRegex, "\\u003c$1")
 }
 
-/** Replace special characters needed in quoted HTML Attribute values with HTML entities */
+/** Sequences that end a `<style>` early */
+const styleEndRegex = /<\/(style)/gi
+
+/**
+ * Make text safe as the contents of a `<style>`
+ * 
+ * Browsers do not decode character references in a `<style>`, so its text is written as is, except
+ * that each `</style` is written as `<\/style`, which reads the same inside CSS strings and comments
+ */
+function escapeStyleText(str: string): string {
+    return str.replace(styleEndRegex, "<\\/$1")
+}
+
+/** Log that an element, or an AsyncRenderObject's output, was skipped because it was placed in a `<script>` or `<style>` */
+function skipInRawText(node: unknown): void {
+    console.error("velossr: an element cannot be rendered inside a <script> or <style>, skipping it", node)
+}
+
+/** Set of special characters that need escaping in quoted HTML Attribute values */
+const encodedHtmlAttrValueEntities = /["&]/
+
+/** Regex of special characters that need escaping in quoted HTML Attribute values */
+const encodedHtmlAttrValueRegex = /["&]/g
+
+/**
+ * Replace special characters needed in quoted HTML Attribute values with HTML entities
+ *
+ * `&` is escaped since browsers decode character references in attribute values
+ */
 function escapeHtmlAttrValueText(str: string): string {
-	if (str.length === 0 || str.includes('"') === false) {
+	if (str.length === 0 || encodedHtmlAttrValueEntities.test(str) === false) {
         return str
     }
-    return str.replaceAll('"', '&quot;')
+    return str.replace(encodedHtmlAttrValueRegex, function(match: string): string {
+		if (match === '"') {
+			return '&quot;'
+        }
+		return '&amp;'
+    })
 }
 
 /** Set of special characters that need escaping in HTML Attribute name */
@@ -119,6 +145,31 @@ export class AsyncRenderedVNodeElement {
 }
 
 /**
+ * Text from a Component's output that has not been escaped yet
+ * 
+ * Created by velossr, and escaped once where it is written: as HTML text, or as the contents
+ * of a `<script>` or `<style>`
+ */
+export class ComponentText {
+    /** The unescaped text */
+    text: string
+    /** Create a new ComponentText */
+    constructor(text: string) {
+        this.text = text
+    }
+}
+
+/** Mark the strings in a Component's output, including those in Arrays (such as a fragment), to be escaped where they are written */
+function markComponentOutput(node: ServerVNode): ServerVNode {
+    if (typeof node === "string") {
+        return new ComponentText(node)
+    } else if (node instanceof Array) {
+        return node.map(markComponentOutput)
+    }
+    return node
+}
+
+/**
  * Either Bytes that are ready to append into a Response or an AsyncNode to await
  * to then get Bytes instead
  */
@@ -134,7 +185,7 @@ export type PreparedServerVNodeElement = DynamicVNodeElement | AsyncRenderedVNod
 export type PreparedServerVNode = PreparedServerVNodeElement[]
 
 /** An individual element as part of a ServerVNode */
-export type ServerVNodeElement = HTMLElement | SafeText | DynamicVNodeElement | AsyncRenderedVNodeElement | BasicTypes | null | undefined
+export type ServerVNodeElement = HTMLElement | SafeText | ComponentText | DynamicVNodeElement | AsyncRenderedVNodeElement | BasicTypes | null | undefined
 
 /** Virtual Node for use in SSR */
 export type ServerVNode = ServerVNodeElement | ServerVNode[]
@@ -171,6 +222,8 @@ export function prepareVNodeForRendering(node: ServerVNode): PreparedServerVNode
             nextString += node
         } else if (node instanceof SafeText) {
             nextString += node.text
+        } else if (node instanceof ComponentText) {
+            nextString += escapeHtmlText(node.text)
         } else if (node instanceof DynamicVNodeElement || node instanceof Uint8Array) {
             if (nextString != "") {
                 output.push(encoder.encode(nextString))
@@ -200,6 +253,15 @@ export function prepareVNodeForRendering(node: ServerVNode): PreparedServerVNode
  * Transforms VNodes (either prepared or raw) into RenderedVDOM
  */
 export function renderServerVNode(node: ServerVNode | PreparedServerVNode, request: Request, context: any): RenderedVDOM {
+    return renderServerVNodeIn(node, request, context, escapeHtmlText)
+}
+
+/**
+ * Transforms VNodes into RenderedVDOM, escaping Component text with escapeText (the escaping of
+ * where the VNodes are written)
+ */
+function renderServerVNodeIn(node: ServerVNode | PreparedServerVNode, request: Request, context: any, escapeText: (str: string) => string): RenderedVDOM {
+    const inRawText = escapeText !== escapeHtmlText
     const flatNodes: (ServerVNodeElement | PreparedServerVNodeElement)[] = []
     flattenArray(flatNodes, node)
     const output: RenderedVNode[] = []
@@ -209,16 +271,29 @@ export function renderServerVNode(node: ServerVNode | PreparedServerVNode, reque
         const node = flatNodes[index]
         if (typeof node === 'string') {
             output.push(encoder.encode(node))
+        } else if (node instanceof ComponentText) {
+            output.push(encoder.encode(escapeText(node.text)))
         } else if (node instanceof DynamicVNodeElement) {
+            // A Component in a Component's output inside a <script> or <style> is escaped the same way,
+            // otherwise it keeps the escaping set where it was placed
+            if (inRawText) {
+                node.escapeText = escapeText
+            }
             output.push(new AsyncRenderedVNodeElement(node.render(request, context)))
         } else if (node instanceof HTMLElement) {
-            flatNodes.splice(index, 1, ...node.prepareElement())
-            index--
+            if (inRawText) {
+                skipInRawText(node)
+            } else {
+                flatNodes.splice(index, 1, ...node.prepareElement())
+                index--
+            }
         } else if (node instanceof SafeText) {
             output.push(encoder.encode(node.text))
+        } else if (node instanceof AsyncRenderedVNodeElement && inRawText) {
+            skipInRawText(node)
         } else if (node instanceof AsyncRenderedVNodeElement || node instanceof Uint8Array) {
             output.push(node)
-        } else if (node !== null) {
+        } else if (node !== null && node !== undefined) {
             output.push(encoder.encode(String(node)))
         }
         index++
@@ -227,13 +302,6 @@ export function renderServerVNode(node: ServerVNode | PreparedServerVNode, reque
         }
     }
     return new RenderedVDOM(output)
-}
-
-function escapeStringNode(node: ServerVNode): ServerVNode {
-    if (typeof node === "string") {
-        return escapeHtmlText(node)
-    }
-    return node
 }
 
 /**
@@ -246,6 +314,8 @@ export class DynamicVNodeElement {
     attrs: Readonly<any>
     /** The children for this VNode */
     children: Readonly<any[]>
+    /** How the text in this Component's output is escaped, set by velossr from where the Component is placed */
+    escapeText: (str: string) => string = escapeHtmlText
     /** Create a new DynamicVNodeElement */
     constructor(component: DynamicServerComponent<any>, attrs: Readonly<any>, children: Readonly<any[]>) {
         this.component = component
@@ -257,12 +327,12 @@ export class DynamicVNodeElement {
         try {
             const ret = this.component.render(this.attrs, this.children, request, context)
             if (ret instanceof Promise) {
-                return renderServerVNode(escapeStringNode(await ret), request, context)
+                return renderServerVNodeIn(markComponentOutput(await ret), request, context, this.escapeText)
             } else {
-                return renderServerVNode(escapeStringNode(ret), request, context)
+                return renderServerVNodeIn(markComponentOutput(ret), request, context, this.escapeText)
             }
         } catch (reason: any) {
-            return renderServerVNode(escapeStringNode(this.component.onFail(reason, this.attrs, this.children, request, context)), request, context)
+            return renderServerVNodeIn(markComponentOutput(this.component.onFail(reason, this.attrs, this.children, request, context)), request, context, this.escapeText)
         }
     }
 }
@@ -511,12 +581,12 @@ export class AsyncRenderObject<DataType> {
         return new AsyncRenderedVNodeElement((async () => {
             try {
                 const data = await this.promise
-                return renderServerVNode(escapeStringNode(await renderFunction(data)), this.request, this.context)
+                return renderServerVNode(markComponentOutput(await renderFunction(data)), this.request, this.context)
             } catch (reason: any) {
                 if (onFail) {
-                    return renderServerVNode(escapeStringNode(onFail(reason, this.request, this.context)), this.request, this.context)
+                    return renderServerVNode(markComponentOutput(onFail(reason, this.request, this.context)), this.request, this.context)
                 } else {
-                    return renderServerVNode(escapeStringNode(this.defaultOnFail(reason, this.request, this.context)), this.request, this.context)
+                    return renderServerVNode(markComponentOutput(this.defaultOnFail(reason, this.request, this.context)), this.request, this.context)
                 }
             }
         })())
@@ -608,7 +678,7 @@ export class HTMLElement {
             return [encoder.encode(`<${this.tag}${Array.from(attributes.entries()).map(attributeKeyConstructor).join("")}>`)]
         } else if (this.tag == "style" || this.tag == "script") {
             const escapedChildren: PreparedServerVNode = []
-            escapeChildren(escapedChildren, this.children, false)
+            escapeChildren(escapedChildren, this.children, this.tag == "script" ? escapeScriptText : escapeStyleText)
             const output: PreparedServerVNode = [encoder.encode(`<${this.tag}${Array.from(attributes.entries()).map(attributeKeyConstructor).join("")}>`)]
             for (const child of escapedChildren) {
                 output.push(child)
@@ -644,22 +714,35 @@ export class SafeText {
 }
 
 /**
- * Process a set of VNodes and string escape any `string` node to be safe HTML Text
+ * Process a set of VNodes and escape each string and Component text with escapeText (HTML text by
+ * default, or the rules for the contents of a `<script>` or `<style>`)
  */
-function escapeChildren(escapedChildren: PreparedServerVNode, children: Readonly<ServerVNode[]>, useHtmlEscape: boolean = true) {
+function escapeChildren(escapedChildren: PreparedServerVNode, children: Readonly<ServerVNode[]>, escapeText: (str: string) => string = escapeHtmlText) {
+    const inRawText = escapeText !== escapeHtmlText
     for (const child of children) {
         if (child instanceof Array) {
-            escapeChildren(escapedChildren, child)
+            escapeChildren(escapedChildren, child, escapeText)
         } else if (child instanceof SafeText) {
             escapedChildren.push(encoder.encode(child.text))
+        } else if (child instanceof ComponentText) {
+            escapedChildren.push(encoder.encode(escapeText(child.text)))
         } else if (child instanceof HTMLElement) {
-            escapedChildren.push(...child.prepareElement())
+            if (inRawText) {
+                skipInRawText(child)
+            } else {
+                escapedChildren.push(...child.prepareElement())
+            }
         } else if (typeof child === "string") {
-            escapedChildren.push(encoder.encode(useHtmlEscape?escapeHtmlText(child):escapeStyleScriptText(child)))
+            escapedChildren.push(encoder.encode(escapeText(child)))
         } else if (child instanceof DynamicVNodeElement) {
+            child.escapeText = escapeText
             escapedChildren.push(child)
         } else if (child instanceof AsyncRenderedVNodeElement) {
-            escapedChildren.push(child)
+            if (inRawText) {
+                skipInRawText(child)
+            } else {
+                escapedChildren.push(child)
+            }
         } else if (child !== null && child !== undefined) {
             escapedChildren.push(encoder.encode(String(child)))
         }
@@ -681,8 +764,8 @@ export function createElement(tag: any, attrs: Readonly<any>, ...children: Reado
         // Create DynamicVNodeElement for resolution later
         return new DynamicVNodeElement(new tag(notNullAttrs, children), notNullAttrs, children)
     } else if (typeof tag === 'function') {
-        // Render Function component now
-        return escapeStringNode(tag(notNullAttrs, children))
+        // Render Function component now, its text is escaped where it is written
+        return markComponentOutput(tag(notNullAttrs, children))
     } else if (typeof tag === 'string') {
         // Inline HTML Element
         return new HTMLElement(tag, attrs, children)

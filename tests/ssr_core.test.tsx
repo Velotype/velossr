@@ -14,6 +14,7 @@ import {
     DynamicServerComponent,
     AsyncRenderObject,
     type EmptyAttrs,
+    type StaticServerComponent,
     type ServerVNode,
 } from "@velotype/velossr/jsx-runtime"
 
@@ -44,6 +45,16 @@ describe("HTML attribute rendering", () => {
     it("escapes quotes in attribute values", async () => {
         const html = await renderToString(<div title='say "hi"'></div>)
         assertEquals(html, '<div title="say &quot;hi&quot;"></div>')
+    })
+    it("escapes ampersands in attribute values so that browsers do not decode character references", async () => {
+        // The braces are needed: a JSX string attribute would decode &lt; to <
+        // deno-lint-ignore jsx-curly-braces
+        const html = await renderToString(<a title={"a &lt; b & c"} href="/search?q=1&lang=en"></a>)
+        assertEquals(html, '<a title="a &amp;lt; b &amp; c" href="/search?q=1&amp;lang=en"></a>')
+    })
+    it("escapes ampersands and quotes in style object values", async () => {
+        const html = await renderToString(<div style={{ fontFamily: '"A&B Sans"' }}></div>)
+        assertEquals(html, '<div style="font-family:&quot;A&amp;B Sans&quot;"></div>')
     })
     it("strips invalid characters from attribute names", async () => {
         const html = await renderToString(createElement("div", { "bad name!": "x" }, []))
@@ -279,5 +290,123 @@ describe("prepareVNodeForRendering", () => {
         assertEquals(decoder.decode(prepared[0] as Uint8Array), "<div>")
         assertEquals(prepared[1] instanceof Uint8Array, false)
         assertEquals(decoder.decode(prepared[2] as Uint8Array), "</div>")
+    })
+})
+
+/** Run fn with console.error replaced, returning the messages it would have logged */
+async function captureErrors(fn: () => Promise<void>): Promise<string[]> {
+    const errors: string[] = []
+    const original = console.error
+    console.error = (...args: unknown[]) => { errors.push(String(args[0])) }
+    try {
+        await fn()
+    } finally {
+        console.error = original
+    }
+    return errors
+}
+
+describe("<script> and <style> contents", () => {
+    it("writes script text as is, without HTML escaping", async () => {
+        const html = await renderToString(<script>{"if (1 < 2 && 3 > 2) { run() }"}</script>)
+        assertEquals(html, "<script>if (1 < 2 && 3 > 2) { run() }</script>")
+    })
+    it("writes the < of </script and <!-- in a script as \\u003c, in any case", async () => {
+        const html = await renderToString(<script>{"a = '</script>'; b = '</SCRIPT>'; c = '<!--'"}</script>)
+        assertEquals(html, "<script>a = '\\u003c/script>'; b = '\\u003c/SCRIPT>'; c = '\\u003c!--'</script>")
+    })
+    it("round trips JSON in a script, whatever its strings contain", async () => {
+        const data = {label: "a </script><b>x</b> <!-- <script> & c > d", list: [1, "<"]}
+        const html = await renderToString(<script type="application/json">{JSON.stringify(data)}</script>)
+        const json = html.slice(html.indexOf(">") + 1, html.lastIndexOf("</script>"))
+        assertEquals(json.includes("</script"), false)
+        assertEquals(JSON.parse(json), data)
+    })
+    it("writes style text as is, and </style as <\\/style", async () => {
+        const html = await renderToString(<style>{'div > p::after { content: "</style>"; }'}</style>)
+        assertEquals(html, '<style>div > p::after { content: "<\\/style>"; }</style>')
+    })
+    it("uses the script escaping for nested arrays and Function Component text", async () => {
+        const Snippet: StaticServerComponent<EmptyAttrs> = () => "x = 1 < 2"
+        const html = await renderToString(<script>{["a && b", ["'</script>'"]]}<Snippet/></script>)
+        assertEquals(html, "<script>a && b'\\u003c/script>'x = 1 < 2</script>")
+    })
+    it("skips an element inside a script or style, and logs an error", async () => {
+        let html = ""
+        const errors = await captureErrors(async () => {
+            html = await renderToString(<script>a()<b>not code</b></script>)
+        })
+        assertEquals(html, "<script>a()</script>")
+        assertEquals(errors.length, 1)
+    })
+    it("uses the script escaping for a DynamicServerComponent inside a script", async () => {
+        class Data extends DynamicServerComponent<EmptyAttrs> {
+            override async render(): Promise<ServerVNode> {
+                await sleep(5)
+                return JSON.stringify({label: "</script> & <b>"})
+            }
+        }
+        const html = await renderToString(<script type="application/json"><Data/></script>)
+        assertEquals(html, '<script type="application/json">{"label":"\\u003c/script> & <b>"}</script>')
+    })
+    it("skips an AsyncRenderObject inside a script, whose output is already HTML text", async () => {
+        class Shared extends DynamicServerComponent<EmptyAttrs> {
+            override render(_attrs: Readonly<EmptyAttrs>, _children: ServerVNode[], request: Request, context: any): ServerVNode {
+                const shared = new AsyncRenderObject<string>(Promise.resolve("x"), request, context)
+                return <script>a(){shared.render((data) => Promise.resolve(data))}</script>
+            }
+        }
+        let html = ""
+        const errors = await captureErrors(async () => {
+            html = await renderToString(<Shared/>)
+        })
+        assertEquals(html, "<script>a()</script>")
+        assertEquals(errors.length, 1)
+    })
+})
+
+describe("Component output escaping", () => {
+    const input = "<img src=x onerror=alert(1)> & more"
+    const escaped = "&lt;img src=x onerror=alert(1)> &amp; more"
+    it("escapes a string returned by a StaticServerComponent once", async () => {
+        const Text: StaticServerComponent<EmptyAttrs> = () => input
+        assertEquals(await renderToString(<p><Text/></p>), `<p>${escaped}</p>`)
+    })
+    it("escapes the strings in an Array returned by a StaticServerComponent once", async () => {
+        const Texts: StaticServerComponent<EmptyAttrs> = () => [input, <>{input}</>]
+        assertEquals(await renderToString(<p><Texts/></p>), `<p>${escaped}${escaped}</p>`)
+    })
+    it("escapes text returned by a StaticServerComponent at the top level", async () => {
+        const Text: StaticServerComponent<EmptyAttrs> = () => input
+        assertEquals(await renderToString(<Text/>), escaped)
+        const prepared = decoder.decode(await renderServerVNode(prepareVNodeForRendering(<Text/>), new Request("http://localhost/"), {}).toArrayBuffer())
+        assertEquals(prepared, escaped)
+    })
+    it("escapes a string, an Array, and a fragment returned by a DynamicServerComponent", async () => {
+        class AsString extends DynamicServerComponent<EmptyAttrs> { override render() { return input } }
+        class AsArray extends DynamicServerComponent<EmptyAttrs> { override render() { return [input] } }
+        class AsFragment extends DynamicServerComponent<EmptyAttrs> { override render() { return <>{input}</> } }
+        class AsFallback extends DynamicServerComponent<EmptyAttrs> {
+            override render(): ServerVNode { throw new Error("failed") }
+            override onFail() { return [input] }
+        }
+        let html = ""
+        await captureErrors(async () => {
+            html = await renderToString(<div><AsString/>|<AsArray/>|<AsFragment/>|<AsFallback/></div>)
+        })
+        assertEquals(html, `<div>${escaped}|${escaped}|${escaped}|${escaped}</div>`)
+    })
+    it("escapes an Array returned by an AsyncRenderObject's render function", async () => {
+        class Shared extends DynamicServerComponent<EmptyAttrs> {
+            override render(_attrs: Readonly<EmptyAttrs>, _children: ServerVNode[], request: Request, context: any): ServerVNode {
+                const shared = new AsyncRenderObject<string>(Promise.resolve(input), request, context)
+                return <p>{shared.render((data) => Promise.resolve([data]))}</p>
+            }
+        }
+        assertEquals(await renderToString(<Shared/>), `<p>${escaped}</p>`)
+    })
+    it("does not escape SafeText", async () => {
+        const Raw: StaticServerComponent<EmptyAttrs> = () => new SafeText("<b>bold</b>")
+        assertEquals(await renderToString(<p><Raw/></p>), "<p><b>bold</b></p>")
     })
 })

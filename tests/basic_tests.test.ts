@@ -3,7 +3,7 @@
 import { afterAll, beforeAll, describe, it } from "@std/testing/bdd"
 import { fail, assertEquals, assertLess } from "@std/assert"
 
-import {App} from "@velotype/veloserver"
+import type {App} from "@velotype/veloserver"
 
 import { launch } from "@astral/astral"
 import type { Browser, ElementHandle, Page } from "@astral/astral"

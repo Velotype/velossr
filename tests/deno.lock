@@ -131,7 +131,7 @@
       "jsr:@velotype/veloserver@^0.0.2"
     ],
     "links": {
-      "jsr:@velotype/velossr@0.0.7": {}
+      "jsr:@velotype/velossr@0.0.8": {}
     }
   }
 }
