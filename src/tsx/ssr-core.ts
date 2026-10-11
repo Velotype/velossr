@@ -59,7 +59,7 @@ const scriptEndRegex = /<(\/script|!--)/gi
  * Make text safe as the contents of a `<script>`
  * 
  * Browsers do not decode character references in a `<script>`, so its text is written as is, except
- * that the `<` of each `</script` and `<!--` is written as `<`, which reads the same inside the
+ * that the `<` of each `</script` and `<!--` is written as `\u003c`, which reads the same inside the
  * JavaScript strings, template literals, regular expressions, and JSON where those sequences can occur
  */
 function escapeScriptText(str: string): string {
