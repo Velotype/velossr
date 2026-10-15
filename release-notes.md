@@ -4,7 +4,7 @@ Changes in each version of `@velotype/velossr` published to [JSR](https://jsr.io
 
 **Breaking** marks a change that can require updates to code that uses velossr.
 
-## Unreleased
+## 0.0.10 — 2026-10-15
 
 - Fix: a `false` child was written as the text `false`, so `{condition && <div/>}` wrote `false` into the page when the condition was false. `false` now renders nothing, as `null` and `undefined` do, and as it does in Velotype. `true` is still written as text.
 
