@@ -41,6 +41,29 @@ describe("HTML text escaping", () => {
     })
 })
 
+describe("conditional rendering", () => {
+    it("renders nothing for false, null, and undefined children, so {condition && <div/>} works", async () => {
+        const html = await renderToString(<ul>{false && <li>hidden</li>}{null}{undefined}<li>shown</li></ul>)
+        assertEquals(html, "<ul><li>shown</li></ul>")
+    })
+    it("renders nothing for false in a prepared page too", async () => {
+        const show = false
+        const prepared = prepareVNodeForRendering(<ul>{show && <li>hidden</li>}<li>shown</li></ul>)
+        assertEquals(decoder.decode(await renderServerVNode(prepared, new Request("http://localhost/"), {}).toArrayBuffer()), "<ul><li>shown</li></ul>")
+    })
+    it("renders nothing for false returned by a DynamicServerComponent", async () => {
+        class Maybe extends DynamicServerComponent<EmptyAttrs> {
+            override render() {
+                return <>{false}<b>shown</b></>
+            }
+        }
+        assertEquals(await renderToString(<div><Maybe/></div>), "<div><b>shown</b></div>")
+    })
+    it("still writes 0 and true as text, as Velotype does", async () => {
+        assertEquals(await renderToString(<div>{0}{true}</div>), "<div>0true</div>")
+    })
+})
+
 describe("HTML attribute rendering", () => {
     it("escapes quotes in attribute values", async () => {
         const html = await renderToString(<div title='say "hi"'></div>)
