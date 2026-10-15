@@ -4,6 +4,10 @@ Changes in each version of `@velotype/velossr` published to [JSR](https://jsr.io
 
 **Breaking** marks a change that can require updates to code that uses velossr.
 
+## Unreleased
+
+- Fix: a `false` child was written as the text `false`, so `{condition && <div/>}` wrote `false` into the page when the condition was false. `false` now renders nothing, as `null` and `undefined` do, and as it does in Velotype. `true` is still written as text.
+
 ## 0.0.9 — 2026-10-11
 
 - Fix (security): the strings in an Array returned by a `DynamicServerComponent`, its `onFail()`, or an `AsyncRenderObject` render function, such as a fragment (`<>{text}</>`), were written without escaping, so request data rendered that way could inject HTML. They are now escaped.

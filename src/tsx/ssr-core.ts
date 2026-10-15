@@ -219,7 +219,10 @@ export function prepareVNodeForRendering(node: ServerVNode): PreparedServerVNode
         } else if (typeof node === 'number') {
             nextString += node
         } else if (typeof node === 'boolean') {
-            nextString += node
+            // false renders nothing, so that {condition && <div/>} works as it does in Velotype
+            if (node) {
+                nextString += node
+            }
         } else if (node instanceof SafeText) {
             nextString += node.text
         } else if (node instanceof ComponentText) {
@@ -293,7 +296,7 @@ function renderServerVNodeIn(node: ServerVNode | PreparedServerVNode, request: R
             skipInRawText(node)
         } else if (node instanceof AsyncRenderedVNodeElement || node instanceof Uint8Array) {
             output.push(node)
-        } else if (node !== null && node !== undefined) {
+        } else if (node !== null && node !== undefined && node !== false) {
             output.push(encoder.encode(String(node)))
         }
         index++
@@ -743,7 +746,7 @@ function escapeChildren(escapedChildren: PreparedServerVNode, children: Readonly
             } else {
                 escapedChildren.push(child)
             }
-        } else if (child !== null && child !== undefined) {
+        } else if (child !== null && child !== undefined && child !== false) {
             escapedChildren.push(encoder.encode(String(child)))
         }
     }
