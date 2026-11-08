@@ -4,6 +4,15 @@ Changes in each version of `@velotype/velossr` published to [JSR](https://jsr.io
 
 **Breaking** marks a change that can require updates to code that uses velossr.
 
+## 0.0.11 — 2026-11-08
+
+Attribute values now follow the same rules as Velotype in the browser.
+
+- Fix: an attribute was written only when its value was truthy, so `alt=""`, `tabindex={0}`, `min={0}` and `value={0}` were left out. Every value other than `null` and `undefined` is now written, including `""` and `0`. `alt=""` renders as a bare `alt`, which browsers read as `alt=""`.
+- **Breaking:** an `aria-` or `data-` boolean is written as `"true"` or `"false"`. `aria-hidden={true}` was a bare `aria-hidden`, which isn't a valid value, and `aria-expanded={false}` or `data-open={false}` were left out. A CSS selector such as `[data-open]` now matches `data-open={false}` too; use `[data-open="true"]` for the true case.
+- Fix: a function that is not an event listener is left out, instead of writing its source.
+- Fix: a style object leaves out `null` and `undefined` values (they were written as `color:null`), keeps custom property names as written (`--brandColor` was written as `--brand-color`), and writes `webkitLineClamp` as `-webkit-line-clamp`.
+
 ## 0.0.10 — 2026-10-15
 
 - Fix: a `false` child was written as the text `false`, so `{condition && <div/>}` wrote `false` into the page when the condition was false. `false` now renders nothing, as `null` and `undefined` do, and as it does in Velotype. `true` is still written as text.
