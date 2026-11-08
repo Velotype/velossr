@@ -95,6 +95,34 @@ describe("HTML attribute rendering", () => {
         const html = await renderToString(<div style={{ display: "flex", marginTop: 4 }}></div>)
         assertEquals(html, '<div style="display:flex;margin-top:4"></div>')
     })
+    it("keeps an empty string value, so alt=\"\" marks an image as decorative", async () => {
+        const html = await renderToString(<img src="/logo.svg" alt=""/>)
+        assertEquals(html, '<img src="/logo.svg" alt>')
+    })
+    it("keeps a zero value", async () => {
+        const html = await renderToString(createElement("input", { type: "number", tabindex: 0, min: 0, value: 0 }, []))
+        assertEquals(html, '<input type="number" tabindex="0" min="0" value="0">')
+    })
+    it("omits null and undefined values", async () => {
+        const html = await renderToString(createElement("div", { title: null, lang: undefined }, []))
+        assertEquals(html, "<div></div>")
+    })
+    it("omits a function value that is not an event listener", async () => {
+        const html = await renderToString(createElement("div", { title: () => "x" }, []))
+        assertEquals(html, "<div></div>")
+    })
+    it("writes aria- and data- booleans as true and false", async () => {
+        const html = await renderToString(createElement("button", { "aria-expanded": false, "aria-hidden": true, "data-open": false }, []))
+        assertEquals(html, '<button aria-expanded="false" aria-hidden="true" data-open="false"></button>')
+    })
+    it("keeps custom property names as written and prefixes webkit properties", async () => {
+        const html = await renderToString(<div style={{ "--brandColor": "red", webkitLineClamp: 2 }}></div>)
+        assertEquals(html, '<div style="--brandColor:red;-webkit-line-clamp:2"></div>')
+    })
+    it("omits null and undefined style values", async () => {
+        const html = await renderToString(<div style={{ color: null, marginTop: undefined, display: "flex" }}></div>)
+        assertEquals(html, '<div style="display:flex"></div>')
+    })
 })
 
 describe("void elements", () => {

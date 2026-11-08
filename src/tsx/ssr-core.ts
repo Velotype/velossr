@@ -597,10 +597,16 @@ export class AsyncRenderObject<DataType> {
 }
 
 /**
- * Convert from lowerCamelCase to hypen-case
+ * The hyphen-case name of a CSS property, as written in a style attribute
+ *
+ * Custom properties are case-sensitive, so they are used as-is, and webkitLineClamp is -webkit-line-clamp
  */
-const upperToHypenCase = function(text: string) {
-    return text.replace(/[A-Z]/g, function(char) {return "-"+char.toLowerCase()})
+const cssPropertyName = function(name: string) {
+    if (name.startsWith("--")) {
+        return name
+    }
+    const hyphenName = name.replace(/[A-Z]/g, function(char) {return "-"+char.toLowerCase()})
+    return hyphenName.startsWith("webkit-") ? "-" + hyphenName : hyphenName
 }
 
 /**
@@ -663,17 +669,27 @@ export class HTMLElement {
                     // Special handling for style object
                     const styleAttributes = []
                     for (const key of Object.keys(value)) {
-                        styleAttributes.push(upperToHypenCase(key)+":"+value[key as keyof typeof value])
+                        const keyValue = value[key as keyof typeof value]
+                        // A null or undefined value sets no declaration
+                        if (keyValue != null) {
+                            styleAttributes.push(cssPropertyName(key)+":"+keyValue)
+                        }
                     }
                     const styleValue = styleAttributes.join(";")
                     attributes.set(name, styleValue)
                 } else if (typeof value == "boolean") {
-                    // Boolean true gets set to empty string, boolean false does not get set
-                    if (value) {
+                    if (name.startsWith("aria-") || name.startsWith("data-")) {
+                        // aria- and data- attributes take the words true and false
+                        attributes.set(name, String(value))
+                    } else if (value) {
+                        // Boolean true gets set to empty string, boolean false does not get set
                         attributes.set(name,"")
                     }
-                } else if (value) {
-                    attributes.set(name, value.toString())
+                } else if (typeof value == "function") {
+                    // A function has no attribute form
+                } else if (value != null) {
+                    // Every other value is set, including "" (alt="" marks an image as decorative) and 0
+                    attributes.set(name, String(value))
                 }
             }
         }
