@@ -718,12 +718,24 @@ export class HTMLElement {
 }
 
 /**
- * Represent a raw string literal that is not escaped. The default escaping
- * will handle the vast majority of cases properly, however HTML / CSS / SVG / JS
- * escaping is complex and syntax parsing dependent. This class can be used
- * to manage complex scenarios, however should be used carefully.
- * 
- * Use with caution, only when input text is known to be safe
+ * Represent a raw string literal that is not escaped - velossr's raw-HTML escape hatch, the
+ * equivalent of `dangerouslySetInnerHTML` / `innerHTML` / unescaped output in other frameworks.
+ * The default escaping will handle the vast majority of cases properly, however HTML / CSS / SVG /
+ * JS escaping is complex and syntax parsing dependent. This class can be used to manage complex
+ * scenarios, however should be used carefully.
+ *
+ * Its text is written exactly as given wherever it is placed - as a child, as a Component's
+ * output, and inside a `<script>` or `<style>` (where it skips their escaping too).
+ *
+ * ```tsx
+ * <a href="/">{new SafeText(LOGO_SVG)}Home</a>
+ * ```
+ *
+ * Typical uses: markup built in a plain `.ts` module (which cannot contain velossr TSX) for pages
+ * to place, inline SVG kept as strings, a prerendered HTML fragment.
+ *
+ * Use with caution, only when input text is known to be safe: escape any outside value yourself
+ * before building the string, and never pass request or user data through it unescaped.
  */
 export class SafeText {
     text: string
