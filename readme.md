@@ -63,7 +63,29 @@ This also makes JSON safe to embed, whatever its strings contain:
 
 A `DynamicServerComponent` inside a `<script>` or `<style>` has its text escaped the same way, so it can write per-request data. Elements, and the output of an `AsyncRenderObject` (which is escaped as HTML), cannot be placed inside a `<script>` or `<style>`: they are skipped, and an error is logged.
 
-For the rare case where you need to emit raw, already-safe content that shouldn't be escaped at all, wrap it in `SafeText`.
+### Writes raw HTML with `SafeText`
+
+`SafeText` is velossr's raw-HTML escape hatch - what other frameworks call `dangerouslySetInnerHTML`, `innerHTML` or unescaped output. A `SafeText` child is written exactly as given: no escaping as HTML text, and none of the `<script>` and `<style>` rules above either.
+
+```tsx
+import { SafeText } from "@velotype/velossr"
+
+// Markup built elsewhere, such as an inline SVG kept as a string
+const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">...</svg>`
+
+<a href="/">{new SafeText(LOGO_SVG)}Home</a>
+
+// A Component may return one, too
+const Logo: StaticServerComponent<EmptyAttrs> = () => new SafeText(LOGO_SVG)
+```
+
+Reach for it when the HTML already exists as a string, for example:
+
+- **Markup shared by code that isn't TSX:** a plain `.ts` module, or one compiled with another `jsxImportSource`, can build the HTML and return a `SafeText` for velossr pages to place. A `.ts` file can't contain velossr TSX, so this is how it shares markup.
+- **Inline SVG or other markup kept as strings:** icons, or a fragment rendered by another tool, such as Markdown converted to HTML.
+- **A prerendered fragment** reused across pages.
+
+**Everything in it is your responsibility.** Escape every value that came from outside the code yourself (`&`, `<`, `>` and `"`, plus `'` inside single-quoted attributes) before building the string, and never pass request data, user input or database text through unescaped. Inside a `<script>` or `<style>` it isn't protected either: a `SafeText` holding `</script>` ends the script. When the content isn't fixed markup, prefer plain TSX, which escapes for you.
 
 ## Types of Components
 
